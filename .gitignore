@@ -1,0 +1,8 @@
+# Générés par les scripts (reproductibles)
+__pycache__/
+analyse/reps_simulees.csv
+analyse/verite_terrain.json
+analyse/seance*.csv
+
+# Artefacts de build Arduino
+firmware/**/build/
