@@ -12,5 +12,7 @@ analyse/capteur_calibration.json
 # Artefacts de build Arduino
 firmware/**/build/
 
-# Profils personnels (donnees d'entrainement)
-analyse/profil_*
+# Profils personnels (données d'entraînement — le script, lui, est versionné)
+analyse/profil_*.json
+analyse/profil_*.csv
+analyse/profil_*.png
