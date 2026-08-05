@@ -24,8 +24,10 @@ import numpy as np
 G_DEFAUT = 9.80665
 
 # Seuils de la chaîne (à re-régler sur données réelles si besoin)
-SEUIL_STD_ACCEL = 0.12      # m/s²  — en dessous : candidat "immobile"
-SEUIL_GYRO = 2.0            # °/s   — idem
+SEUIL_STD_ACCEL = 0.15      # m/s²  — variabilité accel max d'une fenêtre immobile
+SEUIL_STD_GYRO = 5.0        # °/s   — variabilité gyro max ; réglé sur données réelles :
+                            #         une « pause » tenue par un humain tremble toujours
+                            #         (~2-4 °/s), un mouvement dépasse largement (>10)
 FENETRE_IMMOBILE_S = 0.25   # s     — fenêtre glissante des critères
 DUREE_ANCRE_S = 0.40        # s     — durée mini d'une période immobile (ancre ZUPT)
 SEUIL_V_REP = 0.05          # m/s   — seuil de détection d'une phase de rep
@@ -58,14 +60,22 @@ def cumtrapz(y, dt):
 
 
 def detecter_immobilite(accel, gyro_dps, fs):
-    """Masque booléen des instants immobiles (critères variance accel + gyro)."""
+    """Masque booléen des instants immobiles.
+
+    Critères de VARIABILITÉ (écart-type glissant) sur accel et gyro, jamais de
+    niveau absolu : la variance est immunisée contre le biais du gyroscope, qui
+    dérive avec la température et ruinerait un seuil absolu.
+    """
     n_fen = int(FENETRE_IMMOBILE_S * fs)
-    norme_a = np.linalg.norm(accel, axis=1)
-    m = moyenne_glissante(norme_a, n_fen)
-    m2 = moyenne_glissante(norme_a ** 2, n_fen)
-    std_a = np.sqrt(np.maximum(m2 - m ** 2, 0.0))
-    gyro_moy = moyenne_glissante(np.linalg.norm(gyro_dps, axis=1), n_fen)
-    return (std_a < SEUIL_STD_ACCEL) & (gyro_moy < SEUIL_GYRO)
+
+    def std_glissant(x):
+        m = moyenne_glissante(x, n_fen)
+        m2 = moyenne_glissante(x ** 2, n_fen)
+        return np.sqrt(np.maximum(m2 - m ** 2, 0.0))
+
+    std_a = std_glissant(np.linalg.norm(accel, axis=1))
+    std_g = std_glissant(np.linalg.norm(gyro_dps, axis=1))
+    return (std_a < SEUIL_STD_ACCEL) & (std_g < SEUIL_STD_GYRO)
 
 
 def suivre_gravite(accel, omega_rad, immobile, g_init, g_mes, dt):
@@ -149,14 +159,29 @@ def main():
     accel = np.column_stack([d["ax"], d["ay"], d["az"]])
     gyro_dps = np.column_stack([d["gx"], d["gy"], d["gz"]])
 
+    # Calibration accéléro par capteur (offsets/gains mesurés par calibre_6faces.py).
+    # Indispensable dès que le boîtier tourne pendant le geste : un offset fixe dans
+    # le repère capteur se projette variablement sur la verticale et fabrique de la
+    # fausse vitesse. Sans fichier de calibration : données brutes.
+    chemin_cal = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                              "capteur_calibration.json")
+    if os.path.exists(chemin_cal):
+        with open(chemin_cal, encoding="utf-8") as f:
+            cal = json.load(f)
+        accel = (accel - np.array(cal["offset_m_s2"])) / np.array(cal["gain"])
+        print(f"(calibration capteur appliquée : {chemin_cal})")
+
     # 1-2. immobilité + calibration sur la première vraie période immobile
     immobile = detecter_immobilite(accel, gyro_dps, fs)
-    plages_imm = [p for p in plages_vraies(immobile) if (p[1] - p[0]) / fs >= 1.0]
-    if not plages_imm or plages_imm[0][0] / fs > 5.0:
-        raise SystemExit("Pas de période immobile d'au moins 1 s en début "
-                         "d'enregistrement : impossible de calibrer. "
-                         "Rester immobile 2-3 s après la mise sous tension.")
-    c0, c1 = plages_imm[0]
+    plages_imm = [p for p in plages_vraies(immobile) if (p[1] - p[0]) / fs >= 0.8]
+    if not plages_imm:
+        raise SystemExit("Aucune période immobile d'au moins 0,8 s dans tout "
+                         "l'enregistrement : impossible de calibrer. Marquer de "
+                         "vraies pauses (départ posé, verrouillages tenus).")
+    # Calibration sur la plage la plus calme du fichier, pas forcément la
+    # première : tolère un départ d'enregistrement raté ou agité.
+    ng_tout = np.linalg.norm(gyro_dps, axis=1)
+    c0, c1 = min(plages_imm, key=lambda p: ng_tout[p[0]:p[1]].std())
     biais_gyro = gyro_dps[c0:c1].mean(axis=0)
     g_vec0 = accel[c0:c1].mean(axis=0)
     g_mes = float(np.linalg.norm(g_vec0))

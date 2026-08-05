@@ -3,6 +3,11 @@ __pycache__/
 analyse/reps_simulees.csv
 analyse/verite_terrain.json
 analyse/seance*.csv
+analyse/essai_*
+
+# Propre à CHAQUE exemplaire de capteur — ne jamais committer :
+# une calibration étrangère appliquée en silence fausserait les mesures
+analyse/capteur_calibration.json
 
 # Artefacts de build Arduino
 firmware/**/build/
