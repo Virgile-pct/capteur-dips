@@ -117,7 +117,9 @@ def main():
                 + np.array([0.40, -0.30, 0.25])                 # biais gyro, °/s
                 + rng.normal(0, 0.12, (n, 3)))                  # bruit gyro
 
-    en_tete = "t_ms,ax,ay,az,gx,gy,gz"
+    # Le marqueur « simulation » interdit à l'analyseur d'appliquer la calibration
+    # d'un capteur physique à ces données virtuelles (qui n'ont pas ses défauts)
+    en_tete = "# source: simulation\nt_ms,ax,ay,az,gx,gy,gz"
     donnees = np.column_stack([np.round(t * 1000).astype(int),
                                np.round(accel, 4), np.round(gyro_dps, 3)])
     np.savetxt(args.sortie, donnees, delimiter=",", header=en_tete, comments="",

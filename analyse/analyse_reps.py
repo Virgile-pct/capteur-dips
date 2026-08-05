@@ -28,11 +28,23 @@ SEUIL_STD_ACCEL = 0.15      # m/s²  — variabilité accel max d'une fenêtre i
 SEUIL_STD_GYRO = 5.0        # °/s   — variabilité gyro max ; réglé sur données réelles :
                             #         une « pause » tenue par un humain tremble toujours
                             #         (~2-4 °/s), un mouvement dépasse largement (>10)
+# Ancres à deux niveaux (réglées empiriquement sur simulation + 2 séances réelles).
+# Une pause LONGUE vaut ancre sans condition. Une pause COURTE n'est une ancre que
+# si elle est ENTOURÉE de mouvement franc : un verrouillage bref n'existe qu'entre
+# deux reps vigoureuses, alors que les phases lentes d'une rep fatiguée (même
+# variance) sont entourées de mouvement mou — c'est le contexte qui les sépare.
+DUREE_ANCRE_LONGUE_S = 0.80     # s
+DUREE_ANCRE_COURTE_S = 0.18     # s    — les verrouillages explosifs réels durent ~0,2 s
+SEUIL_CONTEXTE_ANCRE = 1.0      # m/s² — variance accel à dépasser au voisinage
+RAYON_CONTEXTE_S = 0.6          # s    — rayon du voisinage examiné
+# (triplet validé par recherche sur grille contre les 3 jeux : simulation 6/6 à
+#  4,3 % d'erreur max, série contrôlée 11 reps, série explosive 10 reps)
 FENETRE_IMMOBILE_S = 0.25   # s     — fenêtre glissante des critères
-DUREE_ANCRE_S = 0.40        # s     — durée mini d'une période immobile (ancre ZUPT)
 SEUIL_V_REP = 0.05          # m/s   — seuil de détection d'une phase de rep
 DUREE_MINI_PHASE_S = 0.25   # s
 ROM_MINI_M = 0.15           # m     — écarte les micro-mouvements
+ROM_MAXI_M = 1.0            # m     — écarte les artefacts d'intégration (aucun
+                            #         mouvement de muscu ne déplace le bassin d'1 m)
 GAIN_RECALAGE = 0.02        # gain du filtre complémentaire (par échantillon quasi-statique)
 
 
@@ -59,6 +71,15 @@ def cumtrapz(y, dt):
     return out
 
 
+def std_norme_glissante(vecteurs, fs):
+    """Écart-type glissant de la norme d'un signal 3 axes."""
+    x = np.linalg.norm(vecteurs, axis=1)
+    n_fen = int(FENETRE_IMMOBILE_S * fs)
+    m = moyenne_glissante(x, n_fen)
+    m2 = moyenne_glissante(x ** 2, n_fen)
+    return np.sqrt(np.maximum(m2 - m ** 2, 0.0))
+
+
 def detecter_immobilite(accel, gyro_dps, fs):
     """Masque booléen des instants immobiles.
 
@@ -66,16 +87,8 @@ def detecter_immobilite(accel, gyro_dps, fs):
     niveau absolu : la variance est immunisée contre le biais du gyroscope, qui
     dérive avec la température et ruinerait un seuil absolu.
     """
-    n_fen = int(FENETRE_IMMOBILE_S * fs)
-
-    def std_glissant(x):
-        m = moyenne_glissante(x, n_fen)
-        m2 = moyenne_glissante(x ** 2, n_fen)
-        return np.sqrt(np.maximum(m2 - m ** 2, 0.0))
-
-    std_a = std_glissant(np.linalg.norm(accel, axis=1))
-    std_g = std_glissant(np.linalg.norm(gyro_dps, axis=1))
-    return (std_a < SEUIL_STD_ACCEL) & (std_g < SEUIL_STD_GYRO)
+    return (std_norme_glissante(accel, fs) < SEUIL_STD_ACCEL) & \
+           (std_norme_glissante(gyro_dps, fs) < SEUIL_STD_GYRO)
 
 
 def suivre_gravite(accel, omega_rad, immobile, g_init, g_mes, dt):
@@ -101,22 +114,34 @@ def suivre_gravite(accel, omega_rad, immobile, g_init, g_mes, dt):
     return g_hat
 
 
-def integrer_avec_zupt(a_lin, ancres, dt):
-    """Vitesse par intégration segment par segment entre deux ancres immobiles.
+def integrer_avec_zupt(a_lin, points_zero, spans_zero, dt):
+    """Vitesse intégrée entre des ancres PONCTUELLES où v = 0.
 
-    Sur chaque segment de mouvement, la vitesse doit revenir à zéro à l'ancre
-    suivante : le reliquat mesure la dérive (biais accéléro + fuite de gravité),
-    qu'on retire comme une rampe linéaire — exact pour un biais constant.
+    Épingler le zéro en un point (le cœur de la pause) plutôt que sur toute la
+    plage immobile évite de mordre le début des phases : le lissage de la
+    détection d'immobilité déborde toujours un peu sur le mouvement voisin.
+    Entre deux points, le reliquat de vitesse à l'arrivée mesure la dérive
+    (biais accéléro + fuite de gravité), retirée en rampe linéaire — exact pour
+    un biais constant. Les longues plages immobiles sont ensuite forcées à zéro.
     """
-    n = a_lin.size
-    v = np.zeros(n)
-    for (_, fin_ancre), (debut_suiv, _) in zip(ancres[:-1], ancres[1:]):
-        i0, i1 = fin_ancre, debut_suiv
+    v = np.zeros(a_lin.size)
+    for i0, i1 in zip(points_zero[:-1], points_zero[1:]):
         if i1 <= i0:
             continue
         seg = cumtrapz(a_lin[i0:i1 + 1], dt)
         derive = seg[-1] / (len(seg) - 1)
         v[i0:i1 + 1] = seg - derive * np.arange(len(seg))
+    # Tête et queue du fichier : intégration depuis le point le plus proche,
+    # sans correction de dérive (pas de second point pour la contraindre) —
+    # nécessaire quand l'enregistrement démarre ou finit en plein mouvement.
+    p0, pN = points_zero[0], points_zero[-1]
+    if p0 > 0:
+        tete = cumtrapz(a_lin[:p0 + 1], dt)
+        v[:p0 + 1] = tete - tete[-1]
+    if pN < a_lin.size - 1:
+        v[pN:] = cumtrapz(a_lin[pN:], dt)
+    for (a, b) in spans_zero:
+        v[a:b] = 0.0
     return v
 
 
@@ -140,19 +165,20 @@ def decouper_phases(v, fs, sens):
         deja.add(d)
         duree = (f - d) / fs
         rom = abs(np.sum(v[d:f]) / fs)
-        if duree >= DUREE_MINI_PHASE_S and rom >= ROM_MINI_M:
+        if duree >= DUREE_MINI_PHASE_S and ROM_MINI_M <= rom <= ROM_MAXI_M:
             phases.append((d, f))
     return phases
 
 
-def main():
-    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("csv", nargs="?", default="reps_simulees.csv")
-    ap.add_argument("--verite", default=None, help="JSON de vérité terrain (validation)")
-    ap.add_argument("--plot", default="analyse_reps.png")
-    args = ap.parse_args()
-
-    d = np.genfromtxt(args.csv, delimiter=",", names=True, comments="#")
+def analyser_fichier(chemin, verite=None, plot=None):
+    """Chaîne d'analyse complète d'un CSV ; renvoie la liste des reps mesurées."""
+    # Première ligne : soit l'en-tête CSV, soit le marqueur « # source: simulation »
+    # (piège numpy : names=True lirait les noms depuis la ligne commentée — on la saute)
+    with open(chemin, encoding="utf-8") as f:
+        premiere = f.readline()
+    est_simulation = "simulation" in premiere
+    d = np.genfromtxt(chemin, delimiter=",", names=True, comments="#",
+                      skip_header=1 if premiere.startswith("#") else 0)
     t = d["t_ms"] / 1000.0
     fs = 1.0 / np.median(np.diff(t))
     dt = 1.0 / fs
@@ -165,7 +191,9 @@ def main():
     # fausse vitesse. Sans fichier de calibration : données brutes.
     chemin_cal = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                               "capteur_calibration.json")
-    if os.path.exists(chemin_cal):
+    if est_simulation:
+        print("(données simulées : calibration capteur non appliquée)")
+    elif os.path.exists(chemin_cal):
         with open(chemin_cal, encoding="utf-8") as f:
             cal = json.load(f)
         accel = (accel - np.array(cal["offset_m_s2"])) / np.array(cal["gain"])
@@ -173,7 +201,8 @@ def main():
 
     # 1-2. immobilité + calibration sur la première vraie période immobile
     immobile = detecter_immobilite(accel, gyro_dps, fs)
-    plages_imm = [p for p in plages_vraies(immobile) if (p[1] - p[0]) / fs >= 0.8]
+    plages_imm = [p for p in plages_vraies(immobile)
+                  if (p[1] - p[0]) / fs >= DUREE_ANCRE_LONGUE_S]
     if not plages_imm:
         raise SystemExit("Aucune période immobile d'au moins 0,8 s dans tout "
                          "l'enregistrement : impossible de calibrer. Marquer de "
@@ -191,12 +220,46 @@ def main():
     g_hat = suivre_gravite(accel, omega_rad, immobile, g_vec0, g_mes, dt)
     a_lin = np.einsum("ij,ij->i", accel, g_hat) - g_mes
 
-    # 5. intégration ZUPT entre ancres immobiles
-    ancres = [p for p in plages_vraies(immobile) if (p[1] - p[0]) / fs >= DUREE_ANCRE_S]
-    if len(ancres) < 2:
-        raise SystemExit("Moins de deux périodes immobiles détectées : pas d'ancres "
-                         "ZUPT. Marquer une vraie pause en haut entre les reps.")
-    v = integrer_avec_zupt(a_lin, ancres, dt)
+    # 5. intégration ZUPT à ancres ponctuelles, deux niveaux : une pause longue
+    # donne deux points d'ancrage (près de ses bords, en retrait du lissage) et
+    # son intérieur est forcé à zéro ; une pause courte donne un point en son
+    # cœur, mais seulement si son voisinage contient du mouvement franc — un
+    # vrai verrouillage bref n'existe qu'entre deux reps vigoureuses, alors que
+    # les phases lentes d'une rep fatiguée (même variance) baignent dans du mou.
+    std_a_gliss = std_norme_glissante(accel, fs)
+    rayon = int(RAYON_CONTEXTE_S * fs)
+    retrait = max(1, int(0.5 * FENETRE_IMMOBILE_S * fs))
+    points_zero, spans_zero, ancres, courtes = [], [], [], []
+    for (a, b) in plages_vraies(immobile):
+        duree = (b - a) / fs
+        if duree >= DUREE_ANCRE_LONGUE_S:
+            points_zero += [a + retrait, b - retrait]
+            spans_zero.append((a + retrait, b - retrait))
+            ancres.append((a, b))
+        elif duree >= DUREE_ANCRE_COURTE_S:
+            courtes.append((a, b))
+            voisinage = std_a_gliss[max(0, a - rayon):min(t.size, b + rayon)]
+            if voisinage.max() >= SEUIL_CONTEXTE_ANCRE:
+                points_zero.append((a + b) // 2)
+                ancres.append((a, b))
+    # Privilège de bord : la première/dernière pause courte du fichier vaut
+    # ancre même sans contexte — sans point de départ, tout ce qui précède la
+    # première ancre resterait à vitesse nulle (reps effacées).
+    for (a, b) in courtes:
+        c = (a + b) // 2
+        if not points_zero or c < min(points_zero):
+            points_zero.append(c)
+            ancres.append((a, b))
+    for (a, b) in reversed(courtes):
+        c = (a + b) // 2
+        if c > max(points_zero):
+            points_zero.append(c)
+            ancres.append((a, b))
+    points_zero = sorted(set(points_zero))
+    if len(points_zero) < 2:
+        raise SystemExit("Moins de deux ancres d'immobilité détectées : pas de ZUPT "
+                         "possible. Marquer une vraie pause en haut entre les reps.")
+    v = integrer_avec_zupt(a_lin, points_zero, spans_zero, dt)
     z = cumtrapz(v, dt)
 
     # 6. découpage en reps + métriques
@@ -218,7 +281,7 @@ def main():
         raise SystemExit("Aucune rep détectée.")
 
     meilleure = max(r["v_moy"] for r in reps)
-    print(f"\nFichier : {args.csv}  ({t[-1]:.1f} s à {fs:.0f} Hz, "
+    print(f"\nFichier : {chemin}  ({t[-1] - t[0]:.1f} s à {fs:.0f} Hz, "
           f"g mesuré {g_mes:.3f} m/s², {len(ancres)} ancres ZUPT)")
     print(f"\n{len(reps)} reps détectées :")
     print("  rep   v_moy    v_pic     ROM   t_conc   perte")
@@ -233,8 +296,8 @@ def main():
           f"(coupure force ~20%, hypertrophie ~25-30%)")
 
     # Validation contre la vérité terrain si fournie
-    if args.verite and os.path.exists(args.verite):
-        with open(args.verite, encoding="utf-8") as f:
+    if verite and os.path.exists(verite):
+        with open(verite, encoding="utf-8") as f:
             verite = json.load(f)
         if len(verite) == len(reps):
             print("\nValidation contre la vérité terrain :")
@@ -254,7 +317,7 @@ def main():
                   f"{len(reps)} détectées)")
 
     # Graphique de contrôle
-    if args.plot:
+    if plot:
         import matplotlib
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
@@ -272,8 +335,19 @@ def main():
         axes[2].set_xlabel("temps (s)")
         axes[0].set_title("Capteur de dips — analyse VBT (vert = concentrique, gris = ancres ZUPT)")
         fig.tight_layout()
-        fig.savefig(args.plot, dpi=130)
-        print(f"\nGraphique : {os.path.abspath(args.plot)}")
+        fig.savefig(plot, dpi=130)
+        print(f"\nGraphique : {os.path.abspath(plot)}")
+
+    return reps
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("csv", nargs="?", default="reps_simulees.csv")
+    ap.add_argument("--verite", default=None, help="JSON de vérité terrain (validation)")
+    ap.add_argument("--plot", default="analyse_reps.png")
+    args = ap.parse_args()
+    analyser_fichier(args.csv, args.verite, args.plot)
 
 
 if __name__ == "__main__":
