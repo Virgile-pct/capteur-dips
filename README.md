@@ -35,6 +35,11 @@ vibreur).
   100 Hz, calibre le gyro au démarrage (2 s immobile, LED allumée), streame en
   CSV sur le port série. Registres écrits à la main, sans bibliothèque MPU (on
   voit passer la datasheet, c'est le but).
+- `firmware/capteur_dips_v2_ble/` — V1 + streaming **BLE** (paquets binaires de
+  5 échantillons, ~20 notifications/s) pour couper le câble USB : capteur sur
+  batterie, capture sans fil via `analyse/capture_ble.py` (pip install bleak).
+  La sortie série reste active en parallèle. L'algo embarqué + le retour
+  vibreur viendront en V3.
 - `analyse/generateur_reps.py` — fabrique une fausse séance de 6 dips avec
   fatigue, vue par un MPU6050 virtuel (inclinaison, oscillation de ceinture,
   bruit, biais). Permet de développer SANS le matériel.
