@@ -245,7 +245,10 @@ function prepare(cv){
   const w = cv.clientWidth, h = parseInt(cv.getAttribute('height'), 10);
   if (!w) return null;
   cv.width = w * dpr; cv.height = h * dpr; cv.style.height = h + 'px';
-  const ctx = cv.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  // willReadFrequently force le rendu LOGICIEL du canvas : contourne les
+  // pilotes GPU qui échouent à allouer le buffer (canvas blanc + icône cassée)
+  const ctx = cv.getContext('2d', {willReadFrequently: true});
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   return {ctx, w, h};
 }
 function surRedim(cv, fn){
