@@ -1,0 +1,529 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Capteur Dips — tableau de bord</title>
+<meta name="description" content="Tableau de bord du capteur VBT open source pour dips lestés : séances mesurées, profil charge-vitesse, capteur en direct (BLE).">
+<style>
+:root{
+  --page:#0d0d0d; --surface:#1a1a19; --surface2:#222220;
+  --ink:#ffffff; --ink2:#c3c2b7; --muted:#898781;
+  --grid:#2c2c2a; --axe:#383835; --ring:rgba(255,255,255,.10);
+  --bleu:#3987e5; --orange:#d95926; --aqua:#199e70;
+  --bonne:#0ca30c; --attention:#fab219; --serieuse:#ec835a; --critique:#d03b3b;
+  --ease:cubic-bezier(.16,1,.3,1);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{color-scheme:dark}
+body{background:var(--page);color:var(--ink);
+  font:15px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif;
+  -webkit-font-smoothing:antialiased}
+.wrap{max-width:1060px;margin:0 auto;padding:0 20px}
+a{color:var(--bleu);text-decoration:none}
+a:hover{text-decoration:underline}
+
+header{padding:42px 0 26px;border-bottom:1px solid var(--grid)}
+.sur-titre{font-size:12px;letter-spacing:.22em;text-transform:uppercase;color:var(--muted)}
+h1{font-size:clamp(28px,5vw,44px);font-weight:800;letter-spacing:-.02em;margin:6px 0 14px}
+h1 .accent{color:var(--bleu)}
+.pilules{display:flex;flex-wrap:wrap;gap:8px}
+.pilule{font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;
+  border:1px solid var(--ring);color:var(--ink2);background:var(--surface)}
+.pilule .pt{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:7px;vertical-align:1px}
+.pt-ok{background:var(--bonne)} .pt-cours{background:var(--attention)} .pt-info{background:var(--bleu)}
+
+section{padding:34px 0;border-bottom:1px solid var(--grid)}
+.sec-titre{font-size:12px;letter-spacing:.22em;text-transform:uppercase;color:var(--muted);margin-bottom:18px}
+h2{font-size:22px;font-weight:750;letter-spacing:-.01em;margin-bottom:4px}
+.sous{color:var(--ink2);font-size:14px;max-width:70ch}
+
+.tuiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:18px}
+.tuile{background:var(--surface);border:1px solid var(--ring);border-radius:10px;padding:14px 16px;
+  transition:transform .5s var(--ease),border-color .5s var(--ease)}
+.tuile:hover{transform:translateY(-2px);border-color:rgba(255,255,255,.22)}
+.tuile .lib{font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.tuile .val{font-size:27px;font-weight:800;letter-spacing:-.02em;margin-top:2px}
+.tuile .unite{font-size:13px;font-weight:600;color:var(--ink2)}
+.tuile .det{font-size:12px;color:var(--muted);margin-top:2px}
+
+.carte{background:var(--surface);border:1px solid var(--ring);border-radius:12px;padding:18px;margin-top:16px}
+.carte-tete{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px 14px;margin-bottom:6px}
+.carte-tete h3{font-size:16.5px;font-weight:700}
+.meta{font-size:12.5px;color:var(--muted)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.chip{font-size:12px;color:var(--ink2);background:var(--surface2);border:1px solid var(--ring);
+  border-radius:7px;padding:3px 9px}
+.chip b{color:var(--ink)}
+canvas{display:block;width:100%}
+.legende{display:flex;flex-wrap:wrap;gap:12px;margin-top:10px;font-size:12px;color:var(--ink2)}
+.legende .cle{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+
+details{margin-top:10px}
+summary{cursor:pointer;font-size:13px;color:var(--muted)}
+table{width:100%;border-collapse:collapse;margin-top:8px;font-size:13px}
+th,td{text-align:right;padding:5px 8px;border-bottom:1px solid var(--grid);
+  font-variant-numeric:tabular-nums}
+th{color:var(--muted);font-weight:600;font-size:11.5px;letter-spacing:.05em;text-transform:uppercase}
+td:first-child,th:first-child{text-align:left}
+
+.grille-paliers{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
+
+.btn{display:inline-block;font:inherit;font-weight:700;color:var(--page);background:var(--bleu);
+  border:none;border-radius:9px;padding:10px 18px;cursor:pointer;
+  transition:transform .45s var(--ease),filter .3s var(--ease)}
+.btn:hover{transform:translateY(-1px);filter:brightness(1.1)}
+.btn[disabled]{background:var(--surface2);color:var(--muted);cursor:not-allowed;transform:none}
+.btn-2{background:var(--surface2);color:var(--ink);border:1px solid var(--ring)}
+.statut-ble{font-size:13.5px;color:var(--ink2);margin-left:10px}
+
+.pipeline{counter-reset:et;margin-top:12px}
+.pipeline li{list-style:none;position:relative;padding:8px 0 8px 44px;color:var(--ink2);font-size:14px}
+.pipeline li::before{counter-increment:et;content:counter(et);
+  position:absolute;left:0;top:6px;width:28px;height:28px;border-radius:8px;
+  background:var(--surface2);border:1px solid var(--ring);color:var(--ink);
+  font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center}
+.pipeline b{color:var(--ink)}
+
+.route li{list-style:none;padding:7px 0 7px 30px;position:relative;color:var(--ink2);font-size:14px}
+.route li::before{content:"";position:absolute;left:2px;top:11px;width:12px;height:12px;border-radius:4px}
+.route .fait::before{background:var(--bonne)}
+.route .fait{color:var(--muted);text-decoration:line-through;text-decoration-color:rgba(255,255,255,.25)}
+.route .encours::before{background:var(--attention)}
+.route .avenir::before{background:var(--surface2);border:1px solid var(--ring)}
+
+.jalons{margin-top:12px;border-left:2px solid var(--grid);padding-left:18px}
+.jalon{position:relative;padding:6px 0}
+.jalon::before{content:"";position:absolute;left:-24px;top:13px;width:10px;height:10px;
+  border-radius:50%;background:var(--bleu)}
+.jalon .jd{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.jalon .jt{font-size:14px;color:var(--ink2)}
+
+#infobulle{position:fixed;pointer-events:none;z-index:50;background:var(--surface2);
+  border:1px solid var(--ring);border-radius:9px;padding:8px 11px;font-size:12.5px;
+  color:var(--ink2);opacity:0;transform:translateY(4px);
+  transition:opacity .25s var(--ease),transform .25s var(--ease);max-width:240px}
+#infobulle.on{opacity:1;transform:translateY(0)}
+#infobulle b{color:var(--ink)}
+
+footer{padding:30px 0 46px;color:var(--muted);font-size:13px}
+@media (max-width:640px){ .carte{padding:14px} }
+</style>
+</head>
+<body>
+<div id="infobulle"></div>
+
+<header><div class="wrap">
+  <div class="sur-titre">Velocity-based training — streetlifting</div>
+  <h1>CAPTEUR<span class="accent">DIPS</span> · tableau de bord</h1>
+  <div class="pilules">
+    <span class="pilule"><span class="pt pt-ok"></span>V1 validée sur vraies séries</span>
+    <span class="pilule"><span class="pt pt-ok"></span>Calibration 6 faces</span>
+    <span class="pilule"><span class="pt pt-cours"></span>V2 BLE : firmware prêt, batterie en livraison</span>
+    <span class="pilule"><span class="pt pt-info"></span><a href="https://github.com/Virgile-pct/capteur-dips">code source ↗</a></span>
+  </div>
+</div></header>
+
+<section id="refs"><div class="wrap">
+  <div class="sec-titre">Références athlète</div>
+  <h2>Les chiffres qui pilotent l'entraînement</h2>
+  <p class="sous">Mesurés le 5 août 2026, dips au poids de corps (62 kg), capteur calibré.
+  La vitesse de la première rep du jour comparée à ces références = la jauge de fraîcheur.</p>
+  <div class="tuiles" id="tuiles"></div>
+</div></section>
+
+<section id="profil"><div class="wrap">
+  <div class="sec-titre">Profil charge-vitesse</div>
+  <h2>La droite personnelle</h2>
+  <p class="sous" id="profil-sous"></p>
+  <div class="carte">
+    <canvas id="c-profil" height="340" aria-label="Profil charge-vitesse : vitesse moyenne selon le lest"></canvas>
+    <div class="chips" id="profil-chips"></div>
+  </div>
+</div></section>
+
+<section id="seances"><div class="wrap">
+  <div class="sec-titre">Séances mesurées</div>
+  <h2>Rep par rep</h2>
+  <p class="sous">Chaque barre est une répétition (vitesse moyenne concentrique). La couleur
+  suit la perte de vitesse par rapport à la meilleure rep de la série — le signal d'arrêt du VBT.</p>
+  <div class="legende">
+    <span><span class="cle" style="background:var(--bonne)"></span>perte &lt; 10 % — frais</span>
+    <span><span class="cle" style="background:var(--attention)"></span>10-20 % — zone de coupure force</span>
+    <span><span class="cle" style="background:var(--serieuse)"></span>20-30 % — hypertrophie</span>
+    <span><span class="cle" style="background:var(--critique)"></span>&gt; 30 % — au-delà</span>
+  </div>
+  <div id="seances-principales"></div>
+  <h2 style="margin-top:26px">Paliers du profil</h2>
+  <div class="grille-paliers" id="seances-paliers"></div>
+</div></section>
+
+<section id="live"><div class="wrap">
+  <div class="sec-titre">Capteur en direct</div>
+  <h2>Connexion Bluetooth <span style="color:var(--muted);font-weight:600;font-size:15px">— firmware V2, arrive avec la batterie</span></h2>
+  <p class="sous">Quand le capteur sans fil sera assemblé : bouton ci-dessous depuis Chrome
+  (ordinateur ou Android), et le flux 100 Hz s'affiche ici en direct — enregistrable en CSV
+  compatible avec toute la chaîne d'analyse.</p>
+  <div class="carte">
+    <div style="display:flex;align-items:center;flex-wrap:wrap;gap:10px">
+      <button class="btn" id="btn-ble">Connecter le capteur</button>
+      <button class="btn btn-2" id="btn-rec" disabled>● Enregistrer</button>
+      <button class="btn btn-2" id="btn-csv" disabled>Télécharger le CSV</button>
+      <span class="statut-ble" id="ble-statut">en attente</span>
+    </div>
+    <canvas id="c-live" height="190" style="margin-top:14px" aria-label="Flux du capteur en direct"></canvas>
+    <div class="legende">
+      <span><span class="cle" style="background:var(--bleu)"></span>norme accéléro (m/s²)</span>
+      <span><span class="cle" style="background:var(--orange)"></span>norme gyro (°/s ÷10)</span>
+    </div>
+  </div>
+</div></section>
+
+<section id="capteur"><div class="wrap">
+  <div class="sec-titre">L'instrument</div>
+  <h2>Fiche technique de l'exemplaire</h2>
+  <div class="carte">
+    <div class="carte-tete"><h3>Chaîne de mesure</h3>
+      <span class="meta" id="materiel-meta"></span></div>
+    <ol class="pipeline">
+      <li><b>Échantillonnage</b> — MPU6050 lu en registres à 100 Hz, filtre interne 44 Hz</li>
+      <li><b>Calibration 6 faces</b> — offsets et gains propres à cet exemplaire (table ci-dessous)</li>
+      <li><b>Immobilité par variance</b> — accéléro + gyro, immunisée contre la dérive du biais</li>
+      <li><b>Suivi de gravité</b> — propagation gyro + recalage accéléro (filtre complémentaire)</li>
+      <li><b>Intégration ZUPT</b> — ancres ponctuelles à deux niveaux, dé-dérive linéaire</li>
+      <li><b>Découpage en reps</b> — phases bornées à 2,5 % du pic, filtres de plausibilité</li>
+    </ol>
+    <div class="carte-tete" style="margin-top:16px"><h3>Calibration accéléromètre</h3>
+      <span class="meta">mesurée par calibre_6faces.py</span></div>
+    <table id="t-cal"><thead><tr><th>Axe</th><th>Gain</th><th>Offset (m/s²)</th></tr></thead><tbody></tbody></table>
+    <div class="chips" id="valid-chips"></div>
+  </div>
+</div></section>
+
+<section id="route"><div class="wrap">
+  <div class="sec-titre">Feuille de route</div>
+  <h2>D'où on vient, où on va</h2>
+  <div class="carte" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:20px">
+    <div><h3 style="font-size:15px;margin-bottom:8px">Chantiers</h3><ul class="route" id="ul-route"></ul></div>
+    <div><h3 style="font-size:15px;margin-bottom:8px">Jalons</h3><div class="jalons" id="dv-jalons"></div></div>
+  </div>
+</div></section>
+
+<footer><div class="wrap">
+  Capteur VBT open source pour dips lestés — <a href="https://github.com/Virgile-pct/capteur-dips">GitHub</a> ·
+  licence MIT · données générées le <span id="genere-le"></span> par genere_dashboard.py
+</div></footer>
+
+<script src="donnees.js"></script>
+<script>
+"use strict";
+const D = window.DONNEES;
+const CSS = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const COULEURS = {bonne:CSS('--bonne'), attention:CSS('--attention'),
+                  serieuse:CSS('--serieuse'), critique:CSS('--critique')};
+const bulle = document.getElementById('infobulle');
+function montreBulle(html, x, y){
+  bulle.innerHTML = html; bulle.classList.add('on');
+  const r = bulle.getBoundingClientRect();
+  bulle.style.left = Math.min(x + 14, innerWidth - r.width - 10) + 'px';
+  bulle.style.top  = Math.max(8, y - r.height - 12) + 'px';
+}
+function cacheBulle(){ bulle.classList.remove('on'); }
+
+/* Canvas net sur écran haute densité. Renvoie null tant que le canvas n'a pas
+   de largeur (onglet en arrière-plan, panneau pas encore affiché) : le
+   ResizeObserver de surRedim() redéclenchera le dessin dès qu'elle existe. */
+function prepare(cv){
+  const dpr = window.devicePixelRatio || 1;
+  const w = cv.clientWidth, h = parseInt(cv.getAttribute('height'), 10);
+  if (!w) return null;
+  cv.width = w * dpr; cv.height = h * dpr; cv.style.height = h + 'px';
+  const ctx = cv.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return {ctx, w, h};
+}
+function surRedim(cv, fn){
+  new ResizeObserver(fn).observe(cv);
+  addEventListener('resize', fn);
+  // premier dessin garanti après insertion : rAF pour les onglets visibles,
+  // setTimeout pour les onglets en arrière-plan (rAF y est suspendu)
+  requestAnimationFrame(fn);
+  setTimeout(fn, 60);
+}
+
+/* ---------- Tuiles de référence ---------- */
+(function(){
+  const R = D.references, P = D.profil;
+  const t = [
+    {lib:'Vitesse contrôlée', val:R.v_controle.toFixed(2), unite:'m/s', det:'poids de corps, tempo appliqué'},
+    {lib:'Vitesse explosive', val:R.v_explosif_best.toFixed(2), unite:'m/s', det:'meilleure rep, intention max'},
+    {lib:'Amplitude typique', val:R.rom_typique_cm, unite:'cm', det:'profondeur mesurée stable'},
+    {lib:'1RM réel (frais)', val:'+' + R.vrai_1rm_lest, unite:'kg', det:'référence du 1er août'},
+    {lib:'Pente du profil', val:(Math.abs(P.pente)*10).toFixed(2), unite:'m/s / 10 kg', det:'signature personnelle'},
+    {lib:'Coupure force', val:R.seuil_force_pct.join('-'), unite:'% de perte', det:'le signal d’arrêt de série'},
+  ];
+  document.getElementById('tuiles').innerHTML = t.map(x =>
+    `<div class="tuile"><div class="lib">${x.lib}</div>
+     <div class="val">${x.val} <span class="unite">${x.unite}</span></div>
+     <div class="det">${x.det}</div></div>`).join('');
+})();
+
+/* ---------- Profil charge-vitesse ---------- */
+(function(){
+  const P = D.profil; if (!P) return;
+  document.getElementById('profil-sous').textContent =
+    `Meilleure rep par palier de lest, ${P.date} — profil pris fatigué en fin de séance : ` +
+    `la pente est la signature stable, l'ordonnée bougera avec la forme du jour.`;
+  const est = P.estimations_mvt;
+  document.getElementById('profil-chips').innerHTML =
+    `<span class="chip">v = <b>${P.v0.toFixed(3)}</b> − <b>${Math.abs(P.pente).toFixed(4)}</b> × lest</span>
+     <span class="chip">R² = <b>${P.r2.toFixed(3)}</b></span>
+     <span class="chip">plafond du jour (MVT 0,20-0,10) : <b>+${est['0.2']}-${est['0.1']} kg</b></span>
+     <span class="chip">1RM réel frais : <b>+${P.vrai_1rm_frais} kg</b> — l'écart, c'est la fatigue</span>`;
+
+  const cv = document.getElementById('c-profil');
+  let pts = [];
+  function dessine(){
+    const pr = prepare(cv); if (!pr) return;
+    const {ctx, w, h} = pr;
+    const m = {g:46, d:14, h:16, b:34};
+    const X = v => m.g + (v / 75) * (w - m.g - m.d);
+    const Y = v => h - m.b - (v / 1.0) * (h - m.h - m.b);
+    ctx.clearRect(0, 0, w, h);
+
+    ctx.strokeStyle = CSS('--grid'); ctx.lineWidth = 1;
+    ctx.fillStyle = CSS('--muted'); ctx.font = '11px system-ui'; ctx.textAlign = 'center';
+    for (let v = 0; v <= 1.0; v += 0.2){
+      ctx.beginPath(); ctx.moveTo(m.g, Y(v)); ctx.lineTo(w - m.d, Y(v)); ctx.stroke();
+      ctx.textAlign = 'right'; ctx.fillText(v.toFixed(1), m.g - 8, Y(v) + 4); ctx.textAlign = 'center';
+    }
+    for (let l = 0; l <= 75; l += 15) ctx.fillText('+' + l, X(l), h - m.b + 18);
+    ctx.fillText('lest (kg)', (m.g + w - m.d) / 2, h - 4);
+    ctx.save(); ctx.translate(12, (m.h + h - m.b) / 2); ctx.rotate(-Math.PI / 2);
+    ctx.fillText('vitesse moyenne (m/s)', 0, 0); ctx.restore();
+
+    // zone MVT : la bande de vitesse d'un vrai max
+    ctx.fillStyle = 'rgba(137,135,129,.12)';
+    ctx.fillRect(m.g, Y(0.20), w - m.g - m.d, Y(0.10) - Y(0.20));
+    ctx.fillStyle = CSS('--muted'); ctx.textAlign = 'left';
+    ctx.fillText('zone MVT — vitesse d’un vrai max', m.g + 8, Y(0.20) - 6);
+
+    // droite de régression
+    ctx.strokeStyle = CSS('--bleu'); ctx.lineWidth = 2; ctx.setLineDash([7, 6]);
+    ctx.beginPath(); ctx.moveTo(X(0), Y(P.v0)); ctx.lineTo(X(75), Y(P.v0 + P.pente * 75)); ctx.stroke();
+    ctx.setLineDash([]);
+
+    // repère du 1RM réel frais
+    ctx.strokeStyle = CSS('--axe'); ctx.setLineDash([3, 5]);
+    ctx.beginPath(); ctx.moveTo(X(70), Y(0)); ctx.lineTo(X(70), Y(0.95)); ctx.stroke();
+    ctx.setLineDash([]); ctx.fillStyle = CSS('--muted'); ctx.textAlign = 'center';
+    ctx.fillText('1RM réel +70', X(70), Y(0.95) - 4);
+
+    // points mesurés + étiquettes directes
+    pts = P.points.map(p => ({x:X(p.lest), y:Y(p.v), p}));
+    for (const q of pts){
+      ctx.beginPath(); ctx.arc(q.x, q.y, 5.5, 0, 7);
+      ctx.fillStyle = CSS('--bleu'); ctx.fill();
+      ctx.lineWidth = 2; ctx.strokeStyle = CSS('--surface'); ctx.stroke();
+      ctx.fillStyle = CSS('--ink2'); ctx.font = '12px system-ui';
+      ctx.fillText(q.p.v.toFixed(2), q.x, q.y - 12);
+    }
+  }
+  dessine(); surRedim(cv, dessine);
+  cv.addEventListener('mousemove', e => {
+    const r = cv.getBoundingClientRect();
+    const q = pts.find(q => Math.hypot(e.clientX - r.left - q.x, e.clientY - r.top - q.y) < 16);
+    if (q) montreBulle(`<b>+${q.p.lest} kg</b> → <b>${q.p.v.toFixed(3)} m/s</b><br>meilleure rep du palier`,
+                       e.clientX, e.clientY);
+    else cacheBulle();
+  });
+  cv.addEventListener('mouseleave', cacheBulle);
+})();
+
+/* ---------- Séances : barres par rep ---------- */
+function carteSeance(s, compacte){
+  const carte = document.createElement('div'); carte.className = 'carte';
+  carte.innerHTML =
+    `<div class="carte-tete"><h3>${s.titre}${s.lest_kg ? ' · +' + s.lest_kg + ' kg' : ''}</h3>
+      <span class="meta">${s.date} — ${s.note}</span></div>
+     <canvas height="${compacte ? 150 : 190}" aria-label="Vitesse par répétition — ${s.titre}"></canvas>
+     <div class="chips">
+       <span class="chip"><b>${s.n_reps}</b> reps</span>
+       <span class="chip">meilleure <b>${s.v_best.toFixed(3)}</b> m/s</span>
+       <span class="chip">perte finale <b>${s.perte_finale_pct.toFixed(0)} %</b></span>
+     </div>
+     <details><summary>voir le tableau des reps</summary><table>
+       <thead><tr><th>rep</th><th>v moy (m/s)</th><th>v pic</th><th>ROM (cm)</th><th>durée (s)</th><th>perte</th></tr></thead>
+       <tbody>${s.reps.map((r, i) =>
+         `<tr><td>${i + 1}</td><td>${r.v_moy.toFixed(3)}</td><td>${r.v_pic.toFixed(3)}</td>
+          <td>${r.rom_cm.toFixed(1)}</td><td>${r.duree_s.toFixed(2)}</td><td>${r.perte_pct.toFixed(1)} %</td></tr>`).join('')}
+       </tbody></table></details>`;
+  const cv = carte.querySelector('canvas');
+  let barres = [];
+  function dessine(){
+    const pr = prepare(cv); if (!pr) return;
+    const {ctx, w, h} = pr;
+    const m = {g:40, d:8, h:20, b:22};
+    const vmax = Math.max(0.9, ...s.reps.map(r => r.v_moy)) * 1.12;
+    const Y = v => h - m.b - (v / vmax) * (h - m.h - m.b);
+    ctx.clearRect(0, 0, w, h);
+    ctx.strokeStyle = CSS('--grid'); ctx.lineWidth = 1;
+    ctx.fillStyle = CSS('--muted'); ctx.font = '11px system-ui';
+    const pas = vmax > 0.8 ? 0.2 : 0.1;
+    for (let v = 0; v <= vmax; v += pas){
+      ctx.beginPath(); ctx.moveTo(m.g, Y(v)); ctx.lineTo(w - m.d, Y(v)); ctx.stroke();
+      ctx.textAlign = 'right'; ctx.fillText(v.toFixed(1), m.g - 7, Y(v) + 4);
+    }
+    const n = s.reps.length, zone = (w - m.g - m.d) / n;
+    const larg = Math.min(46, zone - 2);
+    barres = [];
+    ctx.textAlign = 'center';
+    s.reps.forEach((r, i) => {
+      const x = m.g + zone * i + (zone - larg) / 2, y = Y(r.v_moy);
+      ctx.fillStyle = COULEURS[r.zone];
+      ctx.beginPath();
+      ctx.roundRect(x, y, larg, h - m.b - y, [4, 4, 0, 0]); ctx.fill();
+      ctx.fillStyle = CSS('--ink2'); ctx.font = '11px system-ui';
+      if (!compacte || n <= 7) ctx.fillText(r.v_moy.toFixed(2), x + larg / 2, y - 5);
+      ctx.fillStyle = CSS('--muted');
+      ctx.fillText(i + 1, x + larg / 2, h - m.b + 15);
+      barres.push({x, y, larg, r, i});
+    });
+    ctx.strokeStyle = CSS('--axe');
+    ctx.beginPath(); ctx.moveTo(m.g, h - m.b); ctx.lineTo(w - m.d, h - m.b); ctx.stroke();
+  }
+  dessine(); surRedim(cv, dessine);
+  cv.addEventListener('mousemove', e => {
+    const rct = cv.getBoundingClientRect();
+    const b = barres.find(b => e.clientX - rct.left >= b.x - 3 && e.clientX - rct.left <= b.x + b.larg + 3);
+    if (b) montreBulle(
+      `<b>rep ${b.i + 1}</b> — perte ${b.r.perte_pct.toFixed(1)} %<br>` +
+      `v moy <b>${b.r.v_moy.toFixed(3)}</b> · pic <b>${b.r.v_pic.toFixed(2)}</b> m/s<br>` +
+      `ROM ${b.r.rom_cm.toFixed(0)} cm · ${b.r.duree_s.toFixed(2)} s`, e.clientX, e.clientY);
+    else cacheBulle();
+  });
+  cv.addEventListener('mouseleave', cacheBulle);
+  return carte;
+}
+(function(){
+  const principales = document.getElementById('seances-principales');
+  const paliers = document.getElementById('seances-paliers');
+  for (const s of D.seances)
+    (s.type === 'palier' ? paliers : principales).appendChild(carteSeance(s, s.type === 'palier'));
+})();
+
+/* ---------- Fiche capteur ---------- */
+(function(){
+  document.getElementById('materiel-meta').textContent = D.validation.materiel;
+  const cal = D.calibration;
+  if (cal){
+    const corps = document.querySelector('#t-cal tbody');
+    ['X', 'Y', 'Z'].forEach((axe, i) => {
+      corps.insertAdjacentHTML('beforeend',
+        `<tr><td>${axe}</td><td>${cal.gain[i].toFixed(4)}</td>
+         <td>${cal.offset_m_s2[i] >= 0 ? '+' : ''}${cal.offset_m_s2[i].toFixed(3)}</td></tr>`);
+    });
+  }
+  const v = D.validation.simulation;
+  document.getElementById('valid-chips').innerHTML =
+    `<span class="chip">erreur v moy <b>${v.v_moy_pct} %</b> (validation simulation)</span>
+     <span class="chip">v pic <b>${v.v_pic_pct} %</b></span>
+     <span class="chip">amplitude <b>${v.rom_pct} %</b></span>
+     <span class="chip">firmware <b>V1 filaire</b> + <b>V2 BLE</b> (compilé, 85 % flash)</span>`;
+})();
+
+/* ---------- Feuille de route + jalons ---------- */
+(function(){
+  document.getElementById('ul-route').innerHTML =
+    D.roadmap.map(r => `<li class="${r.etat}">${r.t}</li>`).join('');
+  document.getElementById('dv-jalons').innerHTML =
+    D.jalons.map(j => `<div class="jalon"><div class="jd">${j.date}</div><div class="jt">${j.t}</div></div>`).join('');
+  document.getElementById('genere-le').textContent = D.genere_le;
+})();
+
+/* ---------- Live BLE (firmware V2) ---------- */
+(function(){
+  const UUID_SERVICE = 'b5f0a1c0-9d6b-4b7a-8e1f-3c2a7d9e0001';
+  const UUID_DATA    = 'b5f0a1c0-9d6b-4b7a-8e1f-3c2a7d9e0002';
+  const btn = document.getElementById('btn-ble'), btnRec = document.getElementById('btn-rec'),
+        btnCsv = document.getElementById('btn-csv'), statut = document.getElementById('ble-statut');
+  const cv = document.getElementById('c-live');
+  const tampon = [];          // ~10 s d'affichage
+  let enregistre = false, lignes = [], anime = false;
+
+  function dessineLive(){
+    const pr = prepare(cv); if (!pr) return;
+    const {ctx, w, h} = pr;
+    ctx.clearRect(0, 0, w, h);
+    ctx.strokeStyle = CSS('--grid');
+    for (const f of [0.25, 0.5, 0.75]){
+      ctx.beginPath(); ctx.moveTo(0, h * f); ctx.lineTo(w, h * f); ctx.stroke();
+    }
+    if (!tampon.length){
+      ctx.fillStyle = CSS('--muted'); ctx.font = '13px system-ui'; ctx.textAlign = 'center';
+      ctx.fillText('en attente du capteur — le flux 100 Hz s’affichera ici', w / 2, h / 2);
+      return;
+    }
+    const n = tampon.length, ech = 40;   // m/s² pleine échelle
+    for (const [idx, coul] of [[0, CSS('--bleu')], [1, CSS('--orange')]]){
+      ctx.strokeStyle = coul; ctx.lineWidth = 2; ctx.beginPath();
+      tampon.forEach((s, i) => {
+        const y = h - (Math.min(s[idx], ech) / ech) * (h - 8) - 4;
+        i ? ctx.lineTo(i / (n - 1) * w, y) : ctx.moveTo(0, y);
+      });
+      ctx.stroke();
+    }
+    if (anime) requestAnimationFrame(dessineLive);
+  }
+  dessineLive(); surRedim(cv, dessineLive);
+
+  if (!('bluetooth' in navigator)){
+    btn.disabled = true;
+    statut.textContent = 'Web Bluetooth indisponible ici — utiliser Chrome (PC/Android)';
+    return;
+  }
+  btn.addEventListener('click', async () => {
+    try{
+      statut.textContent = 'recherche de CapteurDips…';
+      const app = await navigator.bluetooth.requestDevice({
+        filters:[{name:'CapteurDips'}], optionalServices:[UUID_SERVICE]});
+      app.addEventListener('gattserverdisconnected', () => {
+        statut.textContent = 'déconnecté'; anime = false; btnRec.disabled = true;
+      });
+      const gatt = await app.gatt.connect();
+      const srv = await gatt.getPrimaryService(UUID_SERVICE);
+      const car = await srv.getCharacteristic(UUID_DATA);
+      await car.startNotifications();
+      car.addEventListener('characteristicvaluechanged', e => {
+        const dv = e.target.value;
+        for (let o = 0; o + 16 <= dv.byteLength; o += 16){
+          const t = dv.getUint32(o, true);
+          const a = [dv.getInt16(o+4,true)/500, dv.getInt16(o+6,true)/500, dv.getInt16(o+8,true)/500];
+          const g = [dv.getInt16(o+10,true)/10, dv.getInt16(o+12,true)/10, dv.getInt16(o+14,true)/10];
+          const na = Math.hypot(...a), ng = Math.hypot(...g);
+          tampon.push([na, ng / 10]); if (tampon.length > 1000) tampon.shift();
+          if (enregistre) lignes.push(`${t},${a.map(v=>v.toFixed(4)).join(',')},${g.map(v=>v.toFixed(3)).join(',')}`);
+        }
+      });
+      statut.textContent = 'connecté — flux en direct';
+      anime = true; requestAnimationFrame(dessineLive);
+      btnRec.disabled = false;
+    }catch(err){ statut.textContent = 'échec : ' + err.message; }
+  });
+  btnRec.addEventListener('click', () => {
+    enregistre = !enregistre;
+    if (enregistre){ lignes = []; btnRec.textContent = '■ Stop'; btnCsv.disabled = true;
+                     statut.textContent = 'enregistrement…'; }
+    else{ btnRec.textContent = '● Enregistrer'; btnCsv.disabled = !lignes.length;
+          statut.textContent = `${lignes.length} échantillons capturés`; }
+  });
+  btnCsv.addEventListener('click', () => {
+    const blob = new Blob(['t_ms,ax,ay,az,gx,gy,gz\n' + lignes.join('\n') + '\n'], {type:'text/csv'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `seance_ble_${new Date().toISOString().slice(0,10)}.csv`;
+    a.click(); URL.revokeObjectURL(a.href);
+  });
+})();
+</script>
+</body>
+</html>
