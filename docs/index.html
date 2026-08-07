@@ -55,7 +55,9 @@ h2{font-size:22px;font-weight:750;letter-spacing:-.01em;margin-bottom:4px}
 .chip{font-size:12px;color:var(--ink2);background:var(--surface2);border:1px solid var(--ring);
   border-radius:7px;padding:3px 9px}
 .chip b{color:var(--ink)}
-canvas{display:block;width:100%}
+canvas{display:block;width:100%;height:auto}
+#c-profil{height:340px} #c-live{height:190px}
+.hc-190{height:190px} .hc-150{height:150px}
 .legende{display:flex;flex-wrap:wrap;gap:12px;margin-top:10px;font-size:12px;color:var(--ink2)}
 .legende .cle{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
 
@@ -218,6 +220,11 @@ footer{padding:30px 0 46px;color:var(--muted);font-size:13px}
 <script>
 "use strict";
 const D = window.DONNEES;
+// donnees.js absent (déploiement en cours, cache) : une seule tentative de rechargement
+if (!D && !sessionStorage.getItem('recharge')){
+  sessionStorage.setItem('recharge', '1');
+  setTimeout(() => location.reload(), 3000);
+}
 const CSS = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 const COULEURS = {bonne:CSS('--bonne'), attention:CSS('--attention'),
                   serieuse:CSS('--serieuse'), critique:CSS('--critique')};
@@ -251,7 +258,7 @@ function surRedim(cv, fn){
 }
 
 /* ---------- Tuiles de référence ---------- */
-(function(){
+try{(function(){
   const R = D.references, P = D.profil;
   const t = [
     {lib:'Vitesse contrôlée', val:R.v_controle.toFixed(2), unite:'m/s', det:'poids de corps, tempo appliqué'},
@@ -265,10 +272,10 @@ function surRedim(cv, fn){
     `<div class="tuile"><div class="lib">${x.lib}</div>
      <div class="val">${x.val} <span class="unite">${x.unite}</span></div>
      <div class="det">${x.det}</div></div>`).join('');
-})();
+})();}catch(e){console.error('module en panne :', e)}
 
 /* ---------- Profil charge-vitesse ---------- */
-(function(){
+try{(function(){
   const P = D.profil; if (!P) return;
   document.getElementById('profil-sous').textContent =
     `Meilleure rep par palier de lest, ${P.date} — profil pris fatigué en fin de séance : ` +
@@ -337,7 +344,7 @@ function surRedim(cv, fn){
     else cacheBulle();
   });
   cv.addEventListener('mouseleave', cacheBulle);
-})();
+})();}catch(e){console.error('module en panne :', e)}
 
 /* ---------- Séances : barres par rep ---------- */
 function carteSeance(s, compacte){
@@ -345,7 +352,8 @@ function carteSeance(s, compacte){
   carte.innerHTML =
     `<div class="carte-tete"><h3>${s.titre}${s.lest_kg ? ' · +' + s.lest_kg + ' kg' : ''}</h3>
       <span class="meta">${s.date} — ${s.note}</span></div>
-     <canvas height="${compacte ? 150 : 190}" aria-label="Vitesse par répétition — ${s.titre}"></canvas>
+     <canvas height="${compacte ? 150 : 190}" class="hc-${compacte ? 150 : 190}"
+       aria-label="Vitesse par répétition — ${s.titre}"></canvas>
      <div class="chips">
        <span class="chip"><b>${s.n_reps}</b> reps</span>
        <span class="chip">meilleure <b>${s.v_best.toFixed(3)}</b> m/s</span>
@@ -404,15 +412,15 @@ function carteSeance(s, compacte){
   cv.addEventListener('mouseleave', cacheBulle);
   return carte;
 }
-(function(){
+try{(function(){
   const principales = document.getElementById('seances-principales');
   const paliers = document.getElementById('seances-paliers');
   for (const s of D.seances)
     (s.type === 'palier' ? paliers : principales).appendChild(carteSeance(s, s.type === 'palier'));
-})();
+})();}catch(e){console.error('module en panne :', e)}
 
 /* ---------- Fiche capteur ---------- */
-(function(){
+try{(function(){
   document.getElementById('materiel-meta').textContent = D.validation.materiel;
   const cal = D.calibration;
   if (cal){
@@ -429,19 +437,19 @@ function carteSeance(s, compacte){
      <span class="chip">v pic <b>${v.v_pic_pct} %</b></span>
      <span class="chip">amplitude <b>${v.rom_pct} %</b></span>
      <span class="chip">firmware <b>V1 filaire</b> + <b>V2 BLE</b> (compilé, 85 % flash)</span>`;
-})();
+})();}catch(e){console.error('module en panne :', e)}
 
 /* ---------- Feuille de route + jalons ---------- */
-(function(){
+try{(function(){
   document.getElementById('ul-route').innerHTML =
     D.roadmap.map(r => `<li class="${r.etat}">${r.t}</li>`).join('');
   document.getElementById('dv-jalons').innerHTML =
     D.jalons.map(j => `<div class="jalon"><div class="jd">${j.date}</div><div class="jt">${j.t}</div></div>`).join('');
   document.getElementById('genere-le').textContent = D.genere_le;
-})();
+})();}catch(e){console.error('module en panne :', e)}
 
 /* ---------- Live BLE (firmware V2) ---------- */
-(function(){
+try{(function(){
   const UUID_SERVICE = 'b5f0a1c0-9d6b-4b7a-8e1f-3c2a7d9e0001';
   const UUID_DATA    = 'b5f0a1c0-9d6b-4b7a-8e1f-3c2a7d9e0002';
   const btn = document.getElementById('btn-ble'), btnRec = document.getElementById('btn-rec'),
@@ -523,7 +531,7 @@ function carteSeance(s, compacte){
     a.download = `seance_ble_${new Date().toISOString().slice(0,10)}.csv`;
     a.click(); URL.revokeObjectURL(a.href);
   });
-})();
+})();}catch(e){console.error('module en panne :', e)}
 </script>
 </body>
 </html>
