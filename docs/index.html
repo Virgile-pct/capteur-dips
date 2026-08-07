@@ -55,9 +55,18 @@ h2{font-size:22px;font-weight:750;letter-spacing:-.01em;margin-bottom:4px}
 .chip{font-size:12px;color:var(--ink2);background:var(--surface2);border:1px solid var(--ring);
   border-radius:7px;padding:3px 9px}
 .chip b{color:var(--ink)}
-canvas{display:block;width:100%;height:auto}
-#c-profil{height:340px} #c-live{height:190px}
-.hc-190{height:190px} .hc-150{height:150px}
+/* Graphiques en SVG : rendu DOM, indépendant du GPU et des pilotes.
+   Le viewBox gère l'échelle — aucune logique de redimensionnement en JS. */
+svg.graphe{display:block;width:100%;height:auto;overflow:visible}
+svg.graphe text{fill:var(--muted);font:11px system-ui}
+svg.graphe .etiq{fill:var(--ink2);font-size:12px}
+svg.graphe .grille{stroke:var(--grid);stroke-width:1}
+svg.graphe .axe{stroke:var(--axe);stroke-width:1}
+svg.graphe .barre{transition:opacity .3s var(--ease)}
+svg.graphe .barre:hover{opacity:.75}
+svg.graphe .pt{fill:var(--bleu);stroke:var(--surface);stroke-width:2;
+  transition:r .4s var(--ease)}
+svg.graphe .pt:hover{r:8}
 .legende{display:flex;flex-wrap:wrap;gap:12px;margin-top:10px;font-size:12px;color:var(--ink2)}
 .legende .cle{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
 
@@ -139,7 +148,8 @@ footer{padding:30px 0 46px;color:var(--muted);font-size:13px}
   <h2>La droite personnelle</h2>
   <p class="sous" id="profil-sous"></p>
   <div class="carte">
-    <canvas id="c-profil" height="340" aria-label="Profil charge-vitesse : vitesse moyenne selon le lest"></canvas>
+    <svg id="c-profil" class="graphe" viewBox="0 0 1000 340" role="img"
+      aria-label="Profil charge-vitesse : vitesse moyenne selon le lest"></svg>
     <div class="chips" id="profil-chips"></div>
   </div>
 </div></section>
@@ -173,7 +183,8 @@ footer{padding:30px 0 46px;color:var(--muted);font-size:13px}
       <button class="btn btn-2" id="btn-csv" disabled>Télécharger le CSV</button>
       <span class="statut-ble" id="ble-statut">en attente</span>
     </div>
-    <canvas id="c-live" height="190" style="margin-top:14px" aria-label="Flux du capteur en direct"></canvas>
+    <svg id="c-live" class="graphe" viewBox="0 0 1000 190" style="margin-top:14px"
+      role="img" aria-label="Flux du capteur en direct"></svg>
     <div class="legende">
       <span><span class="cle" style="background:var(--bleu)"></span>norme accéléro (m/s²)</span>
       <span><span class="cle" style="background:var(--orange)"></span>norme gyro (°/s ÷10)</span>
@@ -237,27 +248,19 @@ function montreBulle(html, x, y){
 }
 function cacheBulle(){ bulle.classList.remove('on'); }
 
-/* Canvas net sur écran haute densité. Renvoie null tant que le canvas n'a pas
-   de largeur (onglet en arrière-plan, panneau pas encore affiché) : le
-   ResizeObserver de surRedim() redéclenchera le dessin dès qu'elle existe. */
-function prepare(cv){
-  const dpr = window.devicePixelRatio || 1;
-  const w = cv.clientWidth, h = parseInt(cv.getAttribute('height'), 10);
-  if (!w) return null;
-  cv.width = w * dpr; cv.height = h * dpr; cv.style.height = h + 'px';
-  // willReadFrequently force le rendu LOGICIEL du canvas : contourne les
-  // pilotes GPU qui échouent à allouer le buffer (canvas blanc + icône cassée)
-  const ctx = cv.getContext('2d', {willReadFrequently: true});
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  return {ctx, w, h};
+/* Fabrique d'éléments SVG. Les graphiques sont du DOM : pas d'allocation
+   graphique, pas de dépendance au pilote, pas de redimensionnement à gérer
+   (le viewBox s'en charge) — et chaque mark est survolable nativement. */
+const NS = 'http://www.w3.org/2000/svg';
+function el(nom, attrs, texte){
+  const e = document.createElementNS(NS, nom);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (texte != null) e.textContent = texte;
+  return e;
 }
-function surRedim(cv, fn){
-  new ResizeObserver(fn).observe(cv);
-  addEventListener('resize', fn);
-  // premier dessin garanti après insertion : rAF pour les onglets visibles,
-  // setTimeout pour les onglets en arrière-plan (rAF y est suspendu)
-  requestAnimationFrame(fn);
-  setTimeout(fn, 60);
+function survol(noeud, html){
+  noeud.addEventListener('mousemove', e => montreBulle(html, e.clientX, e.clientY));
+  noeud.addEventListener('mouseleave', cacheBulle);
 }
 
 /* ---------- Tuiles de référence ---------- */
@@ -290,63 +293,44 @@ try{(function(){
      <span class="chip">plafond du jour (MVT 0,20-0,10) : <b>+${est['0.2']}-${est['0.1']} kg</b></span>
      <span class="chip">1RM réel frais : <b>+${P.vrai_1rm_frais} kg</b> — l'écart, c'est la fatigue</span>`;
 
-  const cv = document.getElementById('c-profil');
-  let pts = [];
-  function dessine(){
-    const pr = prepare(cv); if (!pr) return;
-    const {ctx, w, h} = pr;
-    const m = {g:46, d:14, h:16, b:34};
-    const X = v => m.g + (v / 75) * (w - m.g - m.d);
-    const Y = v => h - m.b - (v / 1.0) * (h - m.h - m.b);
-    ctx.clearRect(0, 0, w, h);
+  const svg = document.getElementById('c-profil');
+  const W = 1000, H = 340, m = {g:52, d:18, h:18, b:38};
+  const X = v => m.g + (v / 75) * (W - m.g - m.d);
+  const Y = v => H - m.b - v * (H - m.h - m.b);
 
-    ctx.strokeStyle = CSS('--grid'); ctx.lineWidth = 1;
-    ctx.fillStyle = CSS('--muted'); ctx.font = '11px system-ui'; ctx.textAlign = 'center';
-    for (let v = 0; v <= 1.0; v += 0.2){
-      ctx.beginPath(); ctx.moveTo(m.g, Y(v)); ctx.lineTo(w - m.d, Y(v)); ctx.stroke();
-      ctx.textAlign = 'right'; ctx.fillText(v.toFixed(1), m.g - 8, Y(v) + 4); ctx.textAlign = 'center';
-    }
-    for (let l = 0; l <= 75; l += 15) ctx.fillText('+' + l, X(l), h - m.b + 18);
-    ctx.fillText('lest (kg)', (m.g + w - m.d) / 2, h - 4);
-    ctx.save(); ctx.translate(12, (m.h + h - m.b) / 2); ctx.rotate(-Math.PI / 2);
-    ctx.fillText('vitesse moyenne (m/s)', 0, 0); ctx.restore();
-
-    // zone MVT : la bande de vitesse d'un vrai max
-    ctx.fillStyle = 'rgba(137,135,129,.12)';
-    ctx.fillRect(m.g, Y(0.20), w - m.g - m.d, Y(0.10) - Y(0.20));
-    ctx.fillStyle = CSS('--muted'); ctx.textAlign = 'left';
-    ctx.fillText('zone MVT — vitesse d’un vrai max', m.g + 8, Y(0.20) - 6);
-
-    // droite de régression
-    ctx.strokeStyle = CSS('--bleu'); ctx.lineWidth = 2; ctx.setLineDash([7, 6]);
-    ctx.beginPath(); ctx.moveTo(X(0), Y(P.v0)); ctx.lineTo(X(75), Y(P.v0 + P.pente * 75)); ctx.stroke();
-    ctx.setLineDash([]);
-
-    // repère du 1RM réel frais
-    ctx.strokeStyle = CSS('--axe'); ctx.setLineDash([3, 5]);
-    ctx.beginPath(); ctx.moveTo(X(70), Y(0)); ctx.lineTo(X(70), Y(0.95)); ctx.stroke();
-    ctx.setLineDash([]); ctx.fillStyle = CSS('--muted'); ctx.textAlign = 'center';
-    ctx.fillText('1RM réel +70', X(70), Y(0.95) - 4);
-
-    // points mesurés + étiquettes directes
-    pts = P.points.map(p => ({x:X(p.lest), y:Y(p.v), p}));
-    for (const q of pts){
-      ctx.beginPath(); ctx.arc(q.x, q.y, 5.5, 0, 7);
-      ctx.fillStyle = CSS('--bleu'); ctx.fill();
-      ctx.lineWidth = 2; ctx.strokeStyle = CSS('--surface'); ctx.stroke();
-      ctx.fillStyle = CSS('--ink2'); ctx.font = '12px system-ui';
-      ctx.fillText(q.p.v.toFixed(2), q.x, q.y - 12);
-    }
+  // grille + graduations
+  for (let v = 0; v <= 1.0001; v += 0.2){
+    svg.appendChild(el('line', {class:'grille', x1:m.g, y1:Y(v), x2:W - m.d, y2:Y(v)}));
+    svg.appendChild(el('text', {x:m.g - 9, y:Y(v) + 4, 'text-anchor':'end'}, v.toFixed(1)));
   }
-  dessine(); surRedim(cv, dessine);
-  cv.addEventListener('mousemove', e => {
-    const r = cv.getBoundingClientRect();
-    const q = pts.find(q => Math.hypot(e.clientX - r.left - q.x, e.clientY - r.top - q.y) < 16);
-    if (q) montreBulle(`<b>+${q.p.lest} kg</b> → <b>${q.p.v.toFixed(3)} m/s</b><br>meilleure rep du palier`,
-                       e.clientX, e.clientY);
-    else cacheBulle();
-  });
-  cv.addEventListener('mouseleave', cacheBulle);
+  for (let l = 0; l <= 75; l += 15)
+    svg.appendChild(el('text', {x:X(l), y:H - m.b + 20, 'text-anchor':'middle'}, '+' + l));
+  svg.appendChild(el('text', {x:(m.g + W - m.d) / 2, y:H - 6, 'text-anchor':'middle'}, 'lest (kg)'));
+  svg.appendChild(el('text', {x:14, y:(m.h + H - m.b) / 2, 'text-anchor':'middle',
+    transform:`rotate(-90 14 ${(m.h + H - m.b) / 2})`}, 'vitesse moyenne (m/s)'));
+
+  // bande MVT : la vitesse à laquelle se joue un vrai maximum
+  svg.appendChild(el('rect', {x:m.g, y:Y(0.20), width:W - m.g - m.d, height:Y(0.10) - Y(0.20),
+    fill:'rgba(137,135,129,.14)'}));
+  svg.appendChild(el('text', {x:m.g + 10, y:Y(0.20) - 7}, 'zone MVT — vitesse d’un vrai max'));
+
+  // repère du 1RM réel mesuré à froid
+  svg.appendChild(el('line', {class:'axe', x1:X(70), y1:Y(0), x2:X(70), y2:Y(0.95),
+    'stroke-dasharray':'3 5'}));
+  svg.appendChild(el('text', {x:X(70), y:Y(0.95) - 6, 'text-anchor':'middle'}, '1RM réel +70'));
+
+  // droite de régression
+  svg.appendChild(el('line', {x1:X(0), y1:Y(P.v0), x2:X(75), y2:Y(P.v0 + P.pente * 75),
+    stroke:'var(--bleu)', 'stroke-width':2, 'stroke-dasharray':'8 6'}));
+
+  // points mesurés, étiquetés et survolables
+  for (const p of P.points){
+    svg.appendChild(el('text', {x:X(p.lest), y:Y(p.v) - 14, 'text-anchor':'middle', class:'etiq'},
+      p.v.toFixed(2)));
+    const c = el('circle', {class:'pt', cx:X(p.lest), cy:Y(p.v), r:6});
+    survol(c, `<b>+${p.lest} kg</b> → <b>${p.v.toFixed(3)} m/s</b><br>meilleure rep du palier`);
+    svg.appendChild(c);
+  }
 })();}catch(e){console.error('module en panne :', e)}
 
 /* ---------- Séances : barres par rep ---------- */
@@ -355,8 +339,8 @@ function carteSeance(s, compacte){
   carte.innerHTML =
     `<div class="carte-tete"><h3>${s.titre}${s.lest_kg ? ' · +' + s.lest_kg + ' kg' : ''}</h3>
       <span class="meta">${s.date} — ${s.note}</span></div>
-     <canvas height="${compacte ? 150 : 190}" class="hc-${compacte ? 150 : 190}"
-       aria-label="Vitesse par répétition — ${s.titre}"></canvas>
+     <svg class="graphe" viewBox="0 0 ${compacte ? 340 : 1000} ${compacte ? 150 : 190}"
+       role="img" aria-label="Vitesse par répétition — ${s.titre}"></svg>
      <div class="chips">
        <span class="chip"><b>${s.n_reps}</b> reps</span>
        <span class="chip">meilleure <b>${s.v_best.toFixed(3)}</b> m/s</span>
@@ -368,51 +352,35 @@ function carteSeance(s, compacte){
          `<tr><td>${i + 1}</td><td>${r.v_moy.toFixed(3)}</td><td>${r.v_pic.toFixed(3)}</td>
           <td>${r.rom_cm.toFixed(1)}</td><td>${r.duree_s.toFixed(2)}</td><td>${r.perte_pct.toFixed(1)} %</td></tr>`).join('')}
        </tbody></table></details>`;
-  const cv = carte.querySelector('canvas');
-  let barres = [];
-  function dessine(){
-    const pr = prepare(cv); if (!pr) return;
-    const {ctx, w, h} = pr;
-    const m = {g:40, d:8, h:20, b:22};
-    const vmax = Math.max(0.9, ...s.reps.map(r => r.v_moy)) * 1.12;
-    const Y = v => h - m.b - (v / vmax) * (h - m.h - m.b);
-    ctx.clearRect(0, 0, w, h);
-    ctx.strokeStyle = CSS('--grid'); ctx.lineWidth = 1;
-    ctx.fillStyle = CSS('--muted'); ctx.font = '11px system-ui';
-    const pas = vmax > 0.8 ? 0.2 : 0.1;
-    for (let v = 0; v <= vmax; v += pas){
-      ctx.beginPath(); ctx.moveTo(m.g, Y(v)); ctx.lineTo(w - m.d, Y(v)); ctx.stroke();
-      ctx.textAlign = 'right'; ctx.fillText(v.toFixed(1), m.g - 7, Y(v) + 4);
-    }
-    const n = s.reps.length, zone = (w - m.g - m.d) / n;
-    const larg = Math.min(46, zone - 2);
-    barres = [];
-    ctx.textAlign = 'center';
-    s.reps.forEach((r, i) => {
-      const x = m.g + zone * i + (zone - larg) / 2, y = Y(r.v_moy);
-      ctx.fillStyle = COULEURS[r.zone];
-      ctx.beginPath();
-      ctx.roundRect(x, y, larg, h - m.b - y, [4, 4, 0, 0]); ctx.fill();
-      ctx.fillStyle = CSS('--ink2'); ctx.font = '11px system-ui';
-      if (!compacte || n <= 7) ctx.fillText(r.v_moy.toFixed(2), x + larg / 2, y - 5);
-      ctx.fillStyle = CSS('--muted');
-      ctx.fillText(i + 1, x + larg / 2, h - m.b + 15);
-      barres.push({x, y, larg, r, i});
-    });
-    ctx.strokeStyle = CSS('--axe');
-    ctx.beginPath(); ctx.moveTo(m.g, h - m.b); ctx.lineTo(w - m.d, h - m.b); ctx.stroke();
+  const svg = carte.querySelector('svg');
+  const W = compacte ? 340 : 1000, H = compacte ? 150 : 190;
+  const m = compacte ? {g:30, d:6, h:18, b:20} : {g:40, d:10, h:20, b:22};
+  const vmax = Math.max(0.9, ...s.reps.map(r => r.v_moy)) * 1.12;
+  const Y = v => H - m.b - (v / vmax) * (H - m.h - m.b);
+
+  for (let v = 0; v <= vmax; v += 0.2){
+    svg.appendChild(el('line', {class:'grille', x1:m.g, y1:Y(v), x2:W - m.d, y2:Y(v)}));
+    svg.appendChild(el('text', {x:m.g - 7, y:Y(v) + 4, 'text-anchor':'end',
+      'font-size':compacte ? 9 : 11}, v.toFixed(1)));
   }
-  dessine(); surRedim(cv, dessine);
-  cv.addEventListener('mousemove', e => {
-    const rct = cv.getBoundingClientRect();
-    const b = barres.find(b => e.clientX - rct.left >= b.x - 3 && e.clientX - rct.left <= b.x + b.larg + 3);
-    if (b) montreBulle(
-      `<b>rep ${b.i + 1}</b> — perte ${b.r.perte_pct.toFixed(1)} %<br>` +
-      `v moy <b>${b.r.v_moy.toFixed(3)}</b> · pic <b>${b.r.v_pic.toFixed(2)}</b> m/s<br>` +
-      `ROM ${b.r.rom_cm.toFixed(0)} cm · ${b.r.duree_s.toFixed(2)} s`, e.clientX, e.clientY);
-    else cacheBulle();
+
+  const n = s.reps.length, zone = (W - m.g - m.d) / n;
+  const larg = Math.min(compacte ? 26 : 46, zone - 2);
+  s.reps.forEach((r, i) => {
+    const x = m.g + zone * i + (zone - larg) / 2, y = Y(r.v_moy);
+    const b = el('rect', {class:'barre', x, y, width:larg, height:H - m.b - y,
+      rx:4, fill:COULEURS[r.zone]});
+    survol(b, `<b>rep ${i + 1}</b> — perte ${r.perte_pct.toFixed(1)} %<br>` +
+      `v moy <b>${r.v_moy.toFixed(3)}</b> · pic <b>${r.v_pic.toFixed(2)}</b> m/s<br>` +
+      `ROM ${r.rom_cm.toFixed(0)} cm · ${r.duree_s.toFixed(2)} s`);
+    svg.appendChild(b);
+    if (!compacte || n <= 7)
+      svg.appendChild(el('text', {x:x + larg / 2, y:y - 5, 'text-anchor':'middle',
+        class:'etiq', 'font-size':compacte ? 9 : 12}, r.v_moy.toFixed(2)));
+    svg.appendChild(el('text', {x:x + larg / 2, y:H - m.b + 14, 'text-anchor':'middle',
+      'font-size':compacte ? 9 : 11}, i + 1));
   });
-  cv.addEventListener('mouseleave', cacheBulle);
+  svg.appendChild(el('line', {class:'axe', x1:m.g, y1:H - m.b, x2:W - m.d, y2:H - m.b}));
   return carte;
 }
 try{(function(){
@@ -457,35 +425,36 @@ try{(function(){
   const UUID_DATA    = 'b5f0a1c0-9d6b-4b7a-8e1f-3c2a7d9e0002';
   const btn = document.getElementById('btn-ble'), btnRec = document.getElementById('btn-rec'),
         btnCsv = document.getElementById('btn-csv'), statut = document.getElementById('ble-statut');
-  const cv = document.getElementById('c-live');
-  const tampon = [];          // ~10 s d'affichage
+  const svg = document.getElementById('c-live');
+  const W = 1000, H = 190, ECH = 40;      // m/s² en pleine échelle
+  const tampon = [];                      // ~10 s d'affichage
   let enregistre = false, lignes = [], anime = false;
 
+  for (const f of [0.25, 0.5, 0.75])
+    svg.appendChild(el('line', {class:'grille', x1:0, y1:H * f, x2:W, y2:H * f}));
+  const attente = el('text', {x:W / 2, y:H / 2, 'text-anchor':'middle', 'font-size':13},
+    'en attente du capteur — le flux 100 Hz s’affichera ici');
+  svg.appendChild(attente);
+  const traces = [
+    el('polyline', {fill:'none', stroke:'var(--bleu)', 'stroke-width':2}),
+    el('polyline', {fill:'none', stroke:'var(--orange)', 'stroke-width':2}),
+  ];
+  traces.forEach(t => svg.appendChild(t));
+
   function dessineLive(){
-    const pr = prepare(cv); if (!pr) return;
-    const {ctx, w, h} = pr;
-    ctx.clearRect(0, 0, w, h);
-    ctx.strokeStyle = CSS('--grid');
-    for (const f of [0.25, 0.5, 0.75]){
-      ctx.beginPath(); ctx.moveTo(0, h * f); ctx.lineTo(w, h * f); ctx.stroke();
-    }
-    if (!tampon.length){
-      ctx.fillStyle = CSS('--muted'); ctx.font = '13px system-ui'; ctx.textAlign = 'center';
-      ctx.fillText('en attente du capteur — le flux 100 Hz s’affichera ici', w / 2, h / 2);
-      return;
-    }
-    const n = tampon.length, ech = 40;   // m/s² pleine échelle
-    for (const [idx, coul] of [[0, CSS('--bleu')], [1, CSS('--orange')]]){
-      ctx.strokeStyle = coul; ctx.lineWidth = 2; ctx.beginPath();
-      tampon.forEach((s, i) => {
-        const y = h - (Math.min(s[idx], ech) / ech) * (h - 8) - 4;
-        i ? ctx.lineTo(i / (n - 1) * w, y) : ctx.moveTo(0, y);
+    if (tampon.length > 1){
+      attente.setAttribute('opacity', 0);
+      const n = tampon.length;
+      traces.forEach((trace, idx) => {
+        let d = '';
+        for (let i = 0; i < n; i++)
+          d += `${(i / (n - 1) * W).toFixed(1)},` +
+               `${(H - Math.min(tampon[i][idx], ECH) / ECH * (H - 8) - 4).toFixed(1)} `;
+        trace.setAttribute('points', d);
       });
-      ctx.stroke();
     }
     if (anime) requestAnimationFrame(dessineLive);
   }
-  dessineLive(); surRedim(cv, dessineLive);
 
   if (!('bluetooth' in navigator)){
     btn.disabled = true;
