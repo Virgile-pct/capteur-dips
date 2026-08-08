@@ -98,9 +98,12 @@ footer{padding:26px 0 44px;color:var(--muted);font-size:13px}
 
 <section><div class="wrap">
   <div class="cmd">
+    <button class="btn on" id="m-fini">Produit fini</button>
+    <button class="btn" id="m-ouvert">Voir l'intérieur</button>
+    <button class="btn" id="m-nu">Sans boîtier</button>
+    <span style="width:10px"></span>
     <button class="btn" id="b-vue">Vue de dessus</button>
     <button class="btn" id="b-reset">Recentrer</button>
-    <button class="btn on" id="b-bat">Batterie</button>
     <div class="curseur"><label for="explose">Éclaté</label>
       <input type="range" id="explose" min="0" max="100" value="0"></div>
   </div>
@@ -159,7 +162,8 @@ footer{padding:26px 0 44px;color:var(--muted);font-size:13px}
 const C = {
   pcb:'#12100f', module:'#b9bcc0', metal:'#9aa0a6', puce:'#1e1c1b',
   passif:'#3a3733', led:'#3987e5', led2:'#c98500', batterie:'#6f7378',
-  vibreur:'#c98f3a', cuivre:'#b87333', vide:'#241f1a'
+  vibreur:'#c98f3a', cuivre:'#b87333', vide:'#241f1a',
+  coque:'#26251f', couvercle:'#302e28', sangle:'#3b3833', bleu:'#3987e5'
 };
 
 const PIECES = [
@@ -198,13 +202,49 @@ const PIECES = [
   {id:'batterie', type:'boite', pos:[0,0,-7.4], taille:[35,24,5], c:C.batterie, groupe:'batterie',
    nom:'Accu LiPo ~400 mAh', dim:'35 × 24 × 5 mm — 5 à 6 h en diffusion continue'},
 
-  {id:'vibreur', type:'cylindre', pos:[27,0,-4], taille:[10,2.7], c:C.vibreur, groupe:'vibreur',
-   nom:'Moteur vibrant', dim:'Ø10 × 2,7 mm — collé dans le boîtier'},
-  {id:'fil1', type:'boite', pos:[22.6,-1.2,-3.2], taille:[7,0.5,0.5], c:C.cuivre, groupe:'vibreur',
-   nom:null},
-  {id:'fil2', type:'boite', pos:[22.6,1.2,-3.2], taille:[7,0.5,0.5], c:C.puce, groupe:'vibreur',
-   nom:null},
+  {id:'vibreur', type:'cylindre', pos:[9,1,1.3], taille:[10,2.7], c:C.vibreur, groupe:'vibreur',
+   nom:'Moteur vibrant', dim:'Ø10 × 2,7 mm — collé sous le couvercle, deux fils vers la carte'},
 ];
+
+/* ------------------------------------------------------- boîtier et sangle
+   Coque 45 × 31 × 14 mm, parois 1,2 mm. Les ailes portent chacune une fente de
+   40 × 4 mm : la sangle passe dessous et ressort dessus, le capteur est captif
+   et plaqué contre la ceinture — c'est ce placage qui garantit la mesure. */
+const COQUE = [];
+const pousse = (id, pos, taille, c, groupe, nom, dim) =>
+  COQUE.push({id, type:'boite', pos, taille, c, groupe, nom:nom||null, dim});
+
+pousse('fond', [0,0,-8.8], [45,31,1.2], C.coque, 'boitier',
+       'Coque inférieure', 'PLA ou PETG imprimé, parois 1,2 mm');
+pousse('mur_g', [-21.9,0,-7.6], [1.2,31,11.6], C.coque, 'boitier');
+pousse('mur_av', [0,-14.9,-7.6], [45,1.2,11.6], C.coque, 'boitier');
+pousse('mur_ar', [0,14.9,-7.6], [45,1.2,11.6], C.coque, 'boitier');
+// mur droit percé pour la prise USB-C : quatre morceaux qui laissent l'ouverture
+pousse('mur_d1', [21.9,-9.95,-7.6], [1.2,11.1,11.6], C.coque, 'boitier');
+pousse('mur_d2', [21.9, 9.95,-7.6], [1.2,11.1,11.6], C.coque, 'boitier');
+pousse('mur_d3', [21.9, 0,-7.6], [1.2,8.8,7.2], C.coque, 'boitier');
+pousse('mur_d4', [21.9, 0, 3.6], [1.2,8.8,0.4], C.coque, 'boitier',
+       'Ouverture USB-C', 'recharge sans ouvrir le boîtier');
+// ailes à fentes (frame en quatre barres autour du vide)
+for (const s of [1, -1]){
+  pousse('ail_i'+s, [0, s*17.25, -8.8], [45,3.5,5], C.coque, 'boitier',
+         s>0 ? 'Passage de sangle' : null, s>0 ? 'fente 40 × 4 mm de chaque côté' : null);
+  pousse('ail_o'+s, [0, s*25.0, -8.8], [45,4,5], C.coque, 'boitier');
+  pousse('ail_l'+s, [-21.25, s*21, -8.8], [2.5,4,5], C.coque, 'boitier');
+  pousse('ail_r'+s, [ 21.25, s*21, -8.8], [2.5,4,5], C.coque, 'boitier');
+}
+pousse('couvercle', [0,0,4.0], [45,31,1.2], C.couvercle, 'couvercle',
+       'Couvercle', 'jupe à friction, démontable');
+COQUE.push({id:'marque', type:'plat', pos:[0,0,5.23], taille:[17,4], c:C.bleu,
+            groupe:'couvercle', nom:null});
+// sangle : passe sous la coque, remonte par les deux fentes, ressort dessus
+for (const s of [1, -1]){
+  pousse('sang_f'+s, [0, s*21, -10.8], [40,3.6,9], C.sangle, 'sangle');
+  pousse('sang_e'+s, [0, s*30.5, -3.8], [40,15,2], C.sangle, 'sangle',
+         s>0 ? 'Sangle de ceinture' : null, s>0 ? '40 mm de large — la ceinture lestée' : null);
+}
+pousse('sang_d', [0,0,-10.8], [40,42,2], C.sangle, 'sangle');
+PIECES.push(...COQUE);
 
 // Passifs et trous de fixation, générés (hors zone antenne et hors module)
 for (const [x,y] of [[3,3],[3,-3],[5.5,1],[7.5,-2],[10,2],[12.5,-2],[13,5],[10.5,6],
@@ -220,16 +260,17 @@ for (const [x,y] of [[-11.5,10.8],[-11.5,-10.8],[17.5,10.8],[17.5,-10.8]])
    projection orthographique. +y vient vers l'observateur, +z monte. */
 const vue = document.getElementById('vue');
 const NS = 'http://www.w3.org/2000/svg';
-const etat  = {lacet:-0.55, elev:0.62, zoom:9.2, eclat:0};
-const cible = {lacet:-0.55, elev:0.62, zoom:9.2, eclat:0};
+const etat  = {lacet:-0.55, elev:0.62, zoom:6.6, eclat:0};
+const cible = {lacet:-0.55, elev:0.62, zoom:6.6, eclat:0};
 let survol = null, largeur = 700, hauteur = 460;
 
 function projette(x, y, z, e){
   const ca = Math.cos(e.lacet), sa = Math.sin(e.lacet);
   const X = x*ca - y*sa, Y = x*sa + y*ca, Z = z;
   const ce = Math.cos(e.elev), se = Math.sin(e.elev);
-  return {sx: X*e.zoom + largeur/2,
-          sy: -(Z*ce - Y*se)*e.zoom + hauteur/2 - 18,
+  const z0 = e.zoom * (1 - 0.26*e.eclat);   // la caméra recule quand on écarte les couches
+  return {sx: X*z0 + largeur/2,
+          sy: -(Z*ce - Y*se)*z0 + hauteur/2 - 18,
           d: Y*ce + Z*se};
 }
 
@@ -251,10 +292,10 @@ function eclaire(nx, ny, nz, e){
 }
 
 function decalage(groupe, t){
-  if (groupe === 'batterie') return -20*t;
-  if (groupe === 'comp')     return  16*t;
-  if (groupe === 'vibreur')  return  10*t;
-  return 0;
+  if (groupe === 'batterie')  return -15*t;
+  if (groupe === 'carte' || groupe === 'comp') return 12*t;
+  if (groupe === 'couvercle' || groupe === 'vibreur') return 30*t;  // le moteur suit le couvercle
+  return 0;                                                          // coque et sangle restent
 }
 
 function facesBoite(p, e){
@@ -318,15 +359,17 @@ function facesCylindre(p, e, seg = 18){
   return F;
 }
 
-let montreBatterie = true;
+let mode = 'fini';   // 'fini' | 'ouvert' | 'nu'
+const EST_COQUE = g => g === 'boitier' || g === 'couvercle' || g === 'sangle';
 
 /* Le tri du peintre par profondeur seule échoue ici : la face supérieure du PCB
    est vaste, son centre paraît proche, et elle recouvrirait les composants posés
    dessus. Comme l'objet est un empilement physique qui ne s'interpénètre jamais,
    on trie d'abord par couche, puis par profondeur à l'intérieur d'une couche. */
 function couche(p){
+  if (EST_COQUE(p.groupe)) return 4;   // l'enveloppe, dessinée par-dessus le contenu
   if (p.groupe === 'batterie') return 0;
-  if (p.id === 'pcb' || p.groupe === 'vibreur') return 1;
+  if (p.id === 'pcb') return 1;
   if (p.type === 'plat' || p.type === 'disque') return 2;
   return 3;
 }
@@ -335,14 +378,18 @@ function dessine(){
   const e = etat;
   let faces = [];
   for (const p of PIECES){
-    if (!montreBatterie && p.groupe === 'batterie') continue;
+    const coque = EST_COQUE(p.groupe);
+    if (mode === 'nu' && coque) continue;
+    if (mode === 'fini' && !coque) continue;    // inutile de calculer ce qui est caché
     let f = [];
     if (p.type === 'boite')     f = facesBoite(p, e);
     else if (p.type === 'plat') f = facesPlat(p, e);
     else if (p.type === 'disque') f = facesDisque(p, e);
     else if (p.type === 'cylindre') f = facesCylindre(p, e);
     const k = couche(p);
-    f.forEach(x => x.couche = k);
+    let op = 1;
+    if (mode === 'ouvert' && coque) op = p.groupe === 'sangle' ? 0.55 : 0.17;
+    f.forEach(x => { x.couche = k; x.op = op; });
     faces = faces.concat(f);
   }
   faces.sort((a,b) => (a.couche - b.couche) || (a.d - b.d));  // lointain d'abord
@@ -353,7 +400,7 @@ function dessine(){
     const attenue = survol && f.piece.id !== survol && f.piece.groupe !== 'carte';
     svg += `<polygon class="piece-face" data-piece="${f.piece.id}" points="${d}"`
         +  ` fill="${f.fill}" stroke="rgba(0,0,0,.45)" stroke-width=".5"`
-        +  ` opacity="${attenue ? .25 : 1}"/>`;
+        +  ` opacity="${(attenue ? .22 : 1) * f.op}"/>`;
   }
   vue.innerHTML = svg;
 }
@@ -396,25 +443,32 @@ vue.addEventListener('wheel', ev => {
   cible.zoom = Math.max(4, Math.min(22, cible.zoom * (ev.deltaY > 0 ? 0.9 : 1.1)));
 }, {passive:false});
 
+const BOUTONS = {fini:'m-fini', ouvert:'m-ouvert', nu:'m-nu'};
+function choisirMode(m){
+  mode = m;
+  for (const [k, id] of Object.entries(BOUTONS))
+    document.getElementById(id).classList.toggle('on', k === m);
+  dessine();
+}
+for (const [m, id] of Object.entries(BOUTONS))
+  document.getElementById(id).addEventListener('click', () => choisirMode(m));
+
 document.getElementById('explose').addEventListener('input', ev => {
   cible.eclat = ev.target.value / 100;
+  // écarter les couches n'a de sens que si on voit à l'intérieur
+  if (cible.eclat > 0 && mode === 'fini') choisirMode('ouvert');
 });
 document.getElementById('b-vue').addEventListener('click', () => {
-  cible.lacet = 0; cible.elev = 1.45; cible.zoom = 10;
+  cible.lacet = 0; cible.elev = 1.45; cible.zoom = 7.4;
 });
 document.getElementById('b-reset').addEventListener('click', () => {
-  cible.lacet = -0.55; cible.elev = 0.62; cible.zoom = 9.2;
-});
-const bBat = document.getElementById('b-bat');
-bBat.addEventListener('click', () => {
-  montreBatterie = !montreBatterie;
-  bBat.classList.toggle('on', montreBatterie);
-  dessine();
+  cible.lacet = -0.55; cible.elev = 0.62; cible.zoom = 6.6;
 });
 
 /* ------------------------------------------------------------- légende */
 (function(){
-  const ordre = ['module','imu','usb','charge','ldo','mos','led1','led2','pads',
+  const ordre = ['couvercle','fond','ail_i1','mur_d4','sang_e1',
+                 'module','imu','usb','charge','ldo','mos','led1','led2','pads',
                  'keepout','batterie','vibreur','pcb'];
   const html = ordre.map(id => {
     const p = PIECES.find(q => q.id === id);
@@ -432,10 +486,11 @@ bBat.addEventListener('click', () => {
 
 /* --------------------------------------------------------------- chiffres */
 document.getElementById('chips').innerHTML =
-  `<span class="chip">carte <b>40 × 26 mm</b></span>
-   <span class="chip">empilage <b>10,6 mm</b> (accu + carte + USB-C)</span>
-   <span class="chip">avec boîtier <b>≈ 13 mm</b></span>
-   <span class="chip">masse estimée <b>≈ 22 g</b></span>
+  `<span class="chip">boîtier <b>45 × 31 × 14 mm</b></span>
+   <span class="chip">avec les ailes <b>45 × 54 mm</b></span>
+   <span class="chip">carte <b>40 × 26 mm</b></span>
+   <span class="chip">fentes de sangle <b>40 × 4 mm</b></span>
+   <span class="chip">masse estimée <b>≈ 28 g</b></span>
    <span class="chip">autonomie <b>5-6 h</b> en diffusion continue</span>`;
 
 const BOM = [
@@ -466,12 +521,13 @@ document.getElementById('chips-cout').innerHTML =
    <span class="chip">prix de vente visé <b>99 € TTC</b></span>`;
 
 /* ------------------------------------------------------------------ go */
+// pose d'entrée AVANT le premier rendu : la vue se pose depuis le dessus,
+// sans sursaut, et reste lisible même si l'animation ne démarre pas
+etat.zoom = 4.6; etat.elev = 1.05;
 new ResizeObserver(dimensionne).observe(vue);
 addEventListener('resize', dimensionne);
 dimensionne();
 requestAnimationFrame(boucle);
-// entrée en scène : la vue se pose doucement
-etat.zoom = 3; etat.elev = 1.3;
 </script>
 </body>
 </html>
