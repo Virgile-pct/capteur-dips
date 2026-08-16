@@ -1,5 +1,5 @@
 window.DONNEES = {
- "genere_le": "2026-08-11",
+ "genere_le": "2026-08-16",
  "seances": [
   {
    "fichier": "dips_sansfil_002.csv",
@@ -9,10 +9,18 @@ window.DONNEES = {
    "lest_kg": 0.0,
    "note": "Capteur sur batterie, liaison Bluetooth, aucun câble : 12050 échantillons, 0 paquet perdu",
    "exercice": "dips",
-   "n_reps": 10,
+   "n_reps": 11,
    "v_best": 0.734,
    "perte_finale_pct": 5.7,
    "reps": [
+    {
+     "v_moy": 0.125,
+     "v_pic": 0.326,
+     "rom_cm": 15.3,
+     "duree_s": 1.22,
+     "perte_pct": 82.9,
+     "zone": "critique"
+    },
     {
      "v_moy": 0.592,
      "v_pic": 1.032,
@@ -165,7 +173,7 @@ window.DONNEES = {
    "lest_kg": 10,
    "note": "Profil tirage — point 2",
    "exercice": "tractions",
-   "n_reps": 3,
+   "n_reps": 4,
    "v_best": 0.635,
    "perte_finale_pct": 72.4,
    "reps": [
@@ -184,6 +192,14 @@ window.DONNEES = {
      "duree_s": 0.88,
      "perte_pct": 0.0,
      "zone": "bonne"
+    },
+    {
+     "v_moy": 0.043,
+     "v_pic": 0.141,
+     "rom_cm": 18.8,
+     "duree_s": 4.34,
+     "perte_pct": 93.2,
+     "zone": "critique"
     },
     {
      "v_moy": 0.175,
@@ -241,7 +257,7 @@ window.DONNEES = {
    "lest_kg": 30,
    "note": "Profil tirage — point 4, single à 90 % du max",
    "exercice": "tractions",
-   "n_reps": 2,
+   "n_reps": 3,
    "v_best": 0.381,
    "perte_finale_pct": 83.4,
    "reps": [
@@ -252,6 +268,14 @@ window.DONNEES = {
      "duree_s": 1.26,
      "perte_pct": 0.0,
      "zone": "bonne"
+    },
+    {
+     "v_moy": 0.044,
+     "v_pic": 0.11,
+     "rom_cm": 15.4,
+     "duree_s": 3.53,
+     "perte_pct": 88.5,
+     "zone": "critique"
     },
     {
      "v_moy": 0.063,
@@ -271,7 +295,7 @@ window.DONNEES = {
    "lest_kg": 20,
    "note": "Test croisé de prise, disques calés derrière les jambes",
    "exercice": "tractions",
-   "n_reps": 3,
+   "n_reps": 4,
    "v_best": 0.509,
    "perte_finale_pct": 0.0,
    "reps": [
@@ -281,6 +305,14 @@ window.DONNEES = {
      "rom_cm": 19.9,
      "duree_s": 3.0,
      "perte_pct": 86.9,
+     "zone": "critique"
+    },
+    {
+     "v_moy": 0.032,
+     "v_pic": 0.124,
+     "rom_cm": 16.5,
+     "duree_s": 5.19,
+     "perte_pct": 93.8,
      "zone": "critique"
     },
     {
@@ -309,9 +341,9 @@ window.DONNEES = {
    "lest_kg": 20,
    "note": "Même position, même fatigue, 5 min après — 9,4 % plus lent",
    "exercice": "tractions",
-   "n_reps": 2,
+   "n_reps": 3,
    "v_best": 0.531,
-   "perte_finale_pct": 7.7,
+   "perte_finale_pct": 82.7,
    "reps": [
     {
      "v_moy": 0.531,
@@ -328,6 +360,14 @@ window.DONNEES = {
      "duree_s": 1.13,
      "perte_pct": 7.7,
      "zone": "bonne"
+    },
+    {
+     "v_moy": 0.092,
+     "v_pic": 0.187,
+     "rom_cm": 15.4,
+     "duree_s": 1.67,
+     "perte_pct": 82.7,
+     "zone": "critique"
     }
    ]
   },
@@ -441,7 +481,7 @@ window.DONNEES = {
    "lest_kg": 0,
    "note": "Intention maximale à chaque rep",
    "exercice": "dips",
-   "n_reps": 11,
+   "n_reps": 12,
    "v_best": 0.833,
    "perte_finale_pct": 81.6,
    "reps": [
@@ -526,6 +566,14 @@ window.DONNEES = {
      "zone": "attention"
     },
     {
+     "v_moy": 0.103,
+     "v_pic": 0.232,
+     "rom_cm": 17.5,
+     "duree_s": 1.7,
+     "perte_pct": 87.6,
+     "zone": "critique"
+    },
+    {
      "v_moy": 0.154,
      "v_pic": 0.26,
      "rom_cm": 30.9,
@@ -597,9 +645,9 @@ window.DONNEES = {
    "lest_kg": 25,
    "note": "Profil charge-vitesse — point 3",
    "exercice": "dips",
-   "n_reps": 8,
+   "n_reps": 10,
    "v_best": 0.52,
-   "perte_finale_pct": 86.4,
+   "perte_finale_pct": 96.8,
    "reps": [
     {
      "v_moy": 0.224,
@@ -650,6 +698,14 @@ window.DONNEES = {
      "zone": "bonne"
     },
     {
+     "v_moy": 0.054,
+     "v_pic": 0.088,
+     "rom_cm": 15.3,
+     "duree_s": 2.85,
+     "perte_pct": 89.7,
+     "zone": "critique"
+    },
+    {
      "v_moy": 0.318,
      "v_pic": 0.683,
      "rom_cm": 27.7,
@@ -664,6 +720,14 @@ window.DONNEES = {
      "duree_s": 2.68,
      "perte_pct": 86.4,
      "zone": "critique"
+    },
+    {
+     "v_moy": 0.017,
+     "v_pic": 0.088,
+     "rom_cm": 15.3,
+     "duree_s": 9.15,
+     "perte_pct": 96.8,
+     "zone": "critique"
     }
    ]
   },
@@ -675,7 +739,7 @@ window.DONNEES = {
    "lest_kg": 40,
    "note": "Profil charge-vitesse — point 4",
    "exercice": "dips",
-   "n_reps": 6,
+   "n_reps": 7,
    "v_best": 0.348,
    "perte_finale_pct": 77.6,
    "reps": [
@@ -694,6 +758,14 @@ window.DONNEES = {
      "duree_s": 1.0,
      "perte_pct": 28.7,
      "zone": "serieuse"
+    },
+    {
+     "v_moy": 0.03,
+     "v_pic": 0.43,
+     "rom_cm": 17.0,
+     "duree_s": 5.75,
+     "perte_pct": 91.5,
+     "zone": "critique"
     },
     {
      "v_moy": 0.313,
@@ -857,6 +929,18 @@ window.DONNEES = {
   {
    "date": "2026-08-07",
    "t": "Firmware V2 BLE écrit et compilé (85 % flash)"
+  },
+  {
+   "date": "2026-08-11",
+   "t": "Reps enchaînées sans pause : la contrainte tombe"
+  },
+  {
+   "date": "2026-08-15",
+   "t": "Algo embarqué : la carte compte ses reps seule, 8/8 identiques à la chaîne PC"
+  },
+  {
+   "date": "2026-08-15",
+   "t": "Trois athlètes, trois mouvements — muscle-up mesuré et reconnu (21 séries sur 21)"
   }
  ],
  "roadmap": [
@@ -873,24 +957,36 @@ window.DONNEES = {
    "t": "Profil charge-vitesse (outil + première droite)"
   },
   {
+   "etat": "fait",
+   "t": "V2 sans fil : mesure en Bluetooth, sans PC câblé"
+  },
+  {
+   "etat": "fait",
+   "t": "Aucune contrainte imposée : reps enchaînées, exercice reconnu seul (21 séries de référence sur 21)"
+  },
+  {
+   "etat": "fait",
+   "t": "V3 : algorithme embarqué, la carte compte ses reps seule"
+  },
+  {
    "etat": "encours",
-   "t": "V2 sans fil : firmware BLE prêt — attente batterie (LiPo + TP4056 + MT3608 commandés)"
+   "t": "Retour immédiat par vibreur au seuil de fatigue"
   },
   {
    "etat": "avenir",
-   "t": "Palet XIAO ESP32-S3 (20 g, chargeur intégré)"
+   "t": "Palet XIAO ESP32-S3 : plus de convertisseur, réveil au mouvement, moitié moins encombrant"
   },
   {
    "etat": "avenir",
-   "t": "V3 : algo embarqué + vibreur au seuil de perte"
+   "t": "Validation vidéo 240 fps de l'amplitude"
   },
   {
    "etat": "avenir",
-   "t": "Profil officiel un jour frais + validation vidéo 240 fps"
+   "t": "Circuit imprimé sur mesure — trois usages, une carte"
   },
   {
    "etat": "avenir",
-   "t": "Force : barres instrumentées (cellules 50 kg + HX711)"
+   "t": "Application mobile"
   }
  ]
 };
